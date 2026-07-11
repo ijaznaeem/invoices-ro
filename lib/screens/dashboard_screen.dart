@@ -102,15 +102,18 @@ class _SectionCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
+      elevation: 0,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: const BoxDecoration(
-              border: Border(
-                  bottom: BorderSide(color: LedgerColors.inkStrong, width: 2)),
+            decoration: BoxDecoration(
+              color: LedgerColors.primary.withValues(alpha: 0.04),
+              border: const Border(
+                bottom: BorderSide(color: LedgerColors.border),
+              ),
             ),
             child: Text(title, style: Theme.of(context).textTheme.titleLarge),
           ),

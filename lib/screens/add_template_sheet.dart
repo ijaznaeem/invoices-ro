@@ -10,6 +10,12 @@ class _ItemDraft {
   final descriptionController = TextEditingController();
   final quantityController = TextEditingController(text: '1');
   final priceController = TextEditingController(text: '0');
+
+  void dispose() {
+    descriptionController.dispose();
+    quantityController.dispose();
+    priceController.dispose();
+  }
 }
 
 Future<void> showAddTemplateSheet(BuildContext context) async {
@@ -60,9 +66,7 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
   @override
   void dispose() {
     for (final item in _items) {
-      item.descriptionController.dispose();
-      item.quantityController.dispose();
-      item.priceController.dispose();
+      item.dispose();
     }
     _intervalDaysController.dispose();
     _paymentTermsController.dispose();
@@ -152,6 +156,8 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                                 labelText: 'Every N days'),
+                            validator: (v) =>
+                                _requiredInt(v, min: 1, label: 'Days'),
                           ),
                         ),
                       ],
@@ -178,6 +184,8 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
                               labelText: 'Payment terms (days)'),
+                          validator: (v) =>
+                              _requiredInt(v, min: 0, label: 'Payment terms'),
                         ),
                       ),
                     ],
@@ -207,6 +215,9 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                             labelText: 'Number of invoices'),
+                        validator: (v) => _endType == EndType.count
+                            ? _requiredInt(v, min: 1, label: 'Invoices')
+                            : null,
                       ),
                     ),
                   if (_endType == EndType.date)
@@ -231,6 +242,8 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                     keyboardType: TextInputType.number,
                     decoration:
                         const InputDecoration(labelText: 'Tax rate (%)'),
+                    validator: (v) =>
+                        _requiredNumber(v, min: 0, label: 'Tax rate'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -285,6 +298,12 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
               controller: item.descriptionController,
               decoration: const InputDecoration(
                   labelText: 'Description', isDense: true),
+              validator: (v) {
+                final hasAnyItemText = _items
+                    .any((i) => i.descriptionController.text.trim().isNotEmpty);
+                if (!hasAnyItemText && index == 0) return 'Required';
+                return null;
+              },
               onChanged: (_) => setState(() {}),
             ),
           ),
@@ -295,6 +314,9 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
               keyboardType: TextInputType.number,
               decoration:
                   const InputDecoration(labelText: 'Qty', isDense: true),
+              validator: (v) => item.descriptionController.text.trim().isEmpty
+                  ? null
+                  : _requiredNumber(v, min: 0.01, label: 'Qty'),
               onChanged: (_) => setState(() {}),
             ),
           ),
@@ -305,13 +327,16 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
               keyboardType: TextInputType.number,
               decoration:
                   const InputDecoration(labelText: 'Price', isDense: true),
+              validator: (v) => item.descriptionController.text.trim().isEmpty
+                  ? null
+                  : _requiredNumber(v, min: 0, label: 'Price'),
               onChanged: (_) => setState(() {}),
             ),
           ),
           IconButton(
             onPressed: _items.length == 1
                 ? null
-                : () => setState(() => _items.removeAt(index)),
+                : () => setState(() => _items.removeAt(index).dispose()),
             icon: const Icon(Icons.close, size: 18),
           ),
         ],
@@ -355,6 +380,11 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
           const SnackBar(content: Text('Add at least one line item.')));
       return;
     }
+    if (_endType == EndType.date && _endDate == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Choose an end date.')));
+      return;
+    }
 
     setState(() => _saving = true);
     final startDateStr = _startDate.toIso8601String().substring(0, 10);
@@ -388,5 +418,21 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
     await state.runGenerationCheck();
 
     if (mounted) Navigator.pop(context);
+  }
+
+  String? _requiredInt(String? value,
+      {required int min, required String label}) {
+    final parsed = int.tryParse(value?.trim() ?? '');
+    if (parsed == null) return 'Enter a valid number';
+    if (parsed < min) return '$label must be at least $min';
+    return null;
+  }
+
+  String? _requiredNumber(String? value,
+      {required double min, required String label}) {
+    final parsed = double.tryParse(value?.trim() ?? '');
+    if (parsed == null) return 'Enter a valid number';
+    if (parsed < min) return '$label must be at least $min';
+    return null;
   }
 }

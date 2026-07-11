@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../db/database_helper.dart';
 import '../db/generation_engine.dart';
 import '../models/models.dart';
+import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
 
 /// Holds everything the UI needs and knows how to reload itself from
@@ -102,9 +103,24 @@ class AppState extends ChangeNotifier {
     await reloadClients();
   }
 
+  Future<void> updateClient(Client client) async {
+    await _db.updateClient(client);
+    await Future.wait([
+      reloadClients(),
+      reloadTemplates(),
+      reloadInvoices(),
+      reloadDashboard(),
+    ]);
+  }
+
   Future<void> deleteClient(int id) async {
     await _db.deleteClient(id);
-    await reloadClients();
+    await Future.wait([
+      reloadClients(),
+      reloadTemplates(),
+      reloadInvoices(),
+      reloadDashboard(),
+    ]);
   }
 
   Future<Client?> getClient(int id) async {
@@ -113,6 +129,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> reloadBusinessSettings() async {
     businessSettings = await _db.getBusinessSettings();
+    setMoneyCurrency(businessSettings.currencySymbol);
     notifyListeners();
   }
 
@@ -166,6 +183,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> cancelInvoice(int id) async {
     await _db.setInvoiceStatus(id, InvoiceStatus.cancelled);
+    await Future.wait([reloadInvoices(), reloadDashboard()]);
+  }
+
+  Future<void> updateInvoice(InvoiceRecord invoice) async {
+    await _db.updateInvoice(invoice);
     await Future.wait([reloadInvoices(), reloadDashboard()]);
   }
 }

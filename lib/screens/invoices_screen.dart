@@ -11,6 +11,26 @@ import 'invoice_pdf_preview_screen.dart';
 
 const _filters = ['All', 'Pending', 'Overdue', 'Paid', 'Cancelled'];
 
+class _InvoiceItemDraft {
+  final descriptionController = TextEditingController();
+  final quantityController = TextEditingController(text: '1');
+  final priceController = TextEditingController(text: '0');
+
+  _InvoiceItemDraft();
+
+  _InvoiceItemDraft.fromItem(InvoiceItem item) {
+    descriptionController.text = item.description;
+    quantityController.text = item.quantity.toString();
+    priceController.text = item.unitPrice.toStringAsFixed(2);
+  }
+
+  void dispose() {
+    descriptionController.dispose();
+    quantityController.dispose();
+    priceController.dispose();
+  }
+}
+
 class InvoicesScreen extends StatelessWidget {
   const InvoicesScreen({super.key});
 
@@ -68,14 +88,15 @@ class InvoicesScreen extends StatelessWidget {
                                   : LedgerTick.pending;
                       return LedgerRow(
                         tick: tick,
-                        title: '${inv.invoiceNumber} · ${inv.clientName ?? ''}',
-                        subtitle:
-                            'Issued ${formatDate(inv.issueDate)} · Due ${formatDate(inv.dueDate)}',
+                        overline: inv.invoiceNumber,
+                        title: inv.clientName?.trim().isNotEmpty == true
+                            ? inv.clientName!
+                            : 'Client',
+                        subtitle: 'Issued ${formatDate(inv.issueDate)}',
                         trailingFigure: money(inv.total),
+                        trailingSubtitle: 'Due ${formatDate(inv.dueDate)}',
                         trailingWidget: StatusPill.forInvoiceStatus(display),
-                        onTap: inv.status == InvoiceStatus.pending
-                            ? () => _showActions(context, state, inv)
-                            : null,
+                        onTap: () => _showActions(context, state, inv),
                       );
                     },
                   ),
@@ -100,14 +121,23 @@ class InvoicesScreen extends StatelessWidget {
               subtitle: Text('${inv.clientName ?? ''} · ${money(inv.total)}'),
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.check_circle_outline, color: Colors.green),
-              title: const Text('Mark paid'),
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit invoice'),
               onTap: () {
                 Navigator.pop(context);
-                state.markInvoicePaid(inv.id!);
+                _showEditInvoiceSheet(context, state, inv);
               },
             ),
+            if (inv.status != InvoiceStatus.paid)
+              ListTile(
+                leading:
+                    const Icon(Icons.check_circle_outline, color: Colors.green),
+                title: const Text('Mark paid'),
+                onTap: () {
+                  Navigator.pop(context);
+                  state.markInvoicePaid(inv.id!);
+                },
+              ),
             ListTile(
               leading:
                   const Icon(Icons.picture_as_pdf_outlined, color: Colors.blue),
@@ -135,18 +165,334 @@ class InvoicesScreen extends StatelessWidget {
                 );
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.cancel_outlined, color: Colors.red),
-              title: const Text('Cancel invoice'),
-              onTap: () {
-                Navigator.pop(context);
-                state.cancelInvoice(inv.id!);
-              },
-            ),
+            if (inv.status != InvoiceStatus.cancelled)
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined, color: Colors.red),
+                title: const Text('Cancel invoice'),
+                onTap: () {
+                  Navigator.pop(context);
+                  state.cancelInvoice(inv.id!);
+                },
+              ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _showEditInvoiceSheet(
+      BuildContext context, AppState state, InvoiceRecord inv) async {
+    if (state.clients.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Add a client first.')));
+      return;
+    }
+
+    final formKey = GlobalKey<FormState>();
+    var clientId = inv.clientId;
+    var issueDate = DateTime.tryParse(inv.issueDate) ?? DateTime.now();
+    var dueDate = DateTime.tryParse(inv.dueDate) ?? DateTime.now();
+    var saving = false;
+    final taxController =
+        TextEditingController(text: inv.tax.toStringAsFixed(2));
+    final items = inv.items.isEmpty
+        ? <_InvoiceItemDraft>[_InvoiceItemDraft()]
+        : inv.items.map(_InvoiceItemDraft.fromItem).toList();
+
+    String? requiredNumber(String? value,
+        {required double min, required String label}) {
+      final parsed = double.tryParse(value?.trim() ?? '');
+      if (parsed == null) return 'Enter a valid number';
+      if (parsed < min) return '$label must be at least $min';
+      return null;
+    }
+
+    double subtotal() => items.fold(0.0, (sum, item) {
+          final quantity = double.tryParse(item.quantityController.text) ?? 0;
+          final price = double.tryParse(item.priceController.text) ?? 0;
+          return sum + quantity * price;
+        });
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          Future<void> pickDate({
+            required DateTime initialDate,
+            required ValueChanged<DateTime> onPicked,
+          }) async {
+            final picked = await showDatePicker(
+              context: sheetContext,
+              initialDate: initialDate,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2100),
+            );
+            if (picked != null) setSheetState(() => onPicked(picked));
+          }
+
+          Future<void> save() async {
+            if (!(formKey.currentState?.validate() ?? false)) return;
+            if (dueDate.isBefore(issueDate)) {
+              ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(
+                  content: Text('Due date cannot be before issue date.')));
+              return;
+            }
+            final invoiceItems = items
+                .where((i) => i.descriptionController.text.trim().isNotEmpty)
+                .map((i) => InvoiceItem(
+                      description: i.descriptionController.text.trim(),
+                      quantity: double.tryParse(i.quantityController.text) ?? 0,
+                      unitPrice: double.tryParse(i.priceController.text) ?? 0,
+                    ))
+                .toList();
+            if (invoiceItems.isEmpty) {
+              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(content: Text('Add at least one line item.')));
+              return;
+            }
+
+            setSheetState(() => saving = true);
+            final invoiceSubtotal =
+                invoiceItems.fold(0.0, (sum, item) => sum + item.lineTotal);
+            final tax = double.tryParse(taxController.text) ?? 0;
+            await state.updateInvoice(InvoiceRecord(
+              id: inv.id,
+              templateId: inv.templateId,
+              invoiceNumber: inv.invoiceNumber,
+              clientId: clientId,
+              items: invoiceItems,
+              subtotal: invoiceSubtotal,
+              tax: tax,
+              total: invoiceSubtotal + tax,
+              issueDate: issueDate.toIso8601String().substring(0, 10),
+              dueDate: dueDate.toIso8601String().substring(0, 10),
+              status: inv.status,
+              paidDate: inv.paidDate,
+            ));
+            if (sheetContext.mounted) Navigator.pop(sheetContext);
+          }
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.88,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (context, scrollController) => Form(
+              key: formKey,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text('Edit ${inv.invoiceNumber}',
+                              style: Theme.of(context).textTheme.titleLarge),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                      children: [
+                        DropdownButtonFormField<int>(
+                          initialValue: clientId,
+                          decoration:
+                              const InputDecoration(labelText: 'Client'),
+                          items: state.clients
+                              .map((c) => DropdownMenuItem(
+                                  value: c.id!, child: Text(c.name)))
+                              .toList(),
+                          onChanged: (v) =>
+                              setSheetState(() => clientId = v ?? clientId),
+                          validator: (v) =>
+                              v == null ? 'Choose a client' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => pickDate(
+                                  initialDate: issueDate,
+                                  onPicked: (date) => issueDate = date,
+                                ),
+                                child: InputDecorator(
+                                  decoration: const InputDecoration(
+                                      labelText: 'Issue date'),
+                                  child: Text(formatDate(issueDate
+                                      .toIso8601String()
+                                      .substring(0, 10))),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => pickDate(
+                                  initialDate: dueDate,
+                                  onPicked: (date) => dueDate = date,
+                                ),
+                                child: InputDecorator(
+                                  decoration: const InputDecoration(
+                                      labelText: 'Due date'),
+                                  child: Text(formatDate(dueDate
+                                      .toIso8601String()
+                                      .substring(0, 10))),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Text('LINE ITEMS',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                    letterSpacing: 0.6,
+                                    fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        ...items.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final item = entry.value;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: TextFormField(
+                                    controller: item.descriptionController,
+                                    decoration: const InputDecoration(
+                                        labelText: 'Description',
+                                        isDense: true),
+                                    validator: (v) {
+                                      final hasAnyItemText = items.any((i) => i
+                                          .descriptionController.text
+                                          .trim()
+                                          .isNotEmpty);
+                                      if (!hasAnyItemText && index == 0) {
+                                        return 'Required';
+                                      }
+                                      return null;
+                                    },
+                                    onChanged: (_) => setSheetState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: item.quantityController,
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(
+                                        labelText: 'Qty', isDense: true),
+                                    validator: (v) => item
+                                            .descriptionController.text
+                                            .trim()
+                                            .isEmpty
+                                        ? null
+                                        : requiredNumber(v,
+                                            min: 0.01, label: 'Qty'),
+                                    onChanged: (_) => setSheetState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: item.priceController,
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(
+                                        labelText: 'Price', isDense: true),
+                                    validator: (v) => item
+                                            .descriptionController.text
+                                            .trim()
+                                            .isEmpty
+                                        ? null
+                                        : requiredNumber(v,
+                                            min: 0, label: 'Price'),
+                                    onChanged: (_) => setSheetState(() {}),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: items.length == 1
+                                      ? null
+                                      : () => setSheetState(() =>
+                                          items.removeAt(index).dispose()),
+                                  icon: const Icon(Icons.close, size: 18),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        TextButton.icon(
+                          onPressed: () => setSheetState(
+                              () => items.add(_InvoiceItemDraft())),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add line item'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: taxController,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Tax amount'),
+                          validator: (v) =>
+                              requiredNumber(v, min: 0, label: 'Tax'),
+                          onChanged: (_) => setSheetState(() {}),
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            'Total ${money(subtotal() + (double.tryParse(taxController.text) ?? 0))}',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: saving ? null : save,
+                        child: saving
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Save changes'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ).whenComplete(() {
+      taxController.dispose();
+      for (final item in items) {
+        item.dispose();
+      }
+    });
   }
 
   Future<String?> _pickPaymentMethod(

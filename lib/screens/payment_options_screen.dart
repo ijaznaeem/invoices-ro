@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/models.dart';
 import '../state/app_state_scope.dart';
+import '../theme/app_theme.dart';
 import '../widgets/status_pill.dart';
 
 /// Standalone screen for managing the list of invoice payment options.
@@ -15,15 +16,18 @@ class PaymentOptionsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Payment Options')),
-      body: options.isEmpty
-          ? const _EmptyPaymentState()
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-              itemCount: options.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, i) =>
-                  _PaymentOptionCard(option: options[i]),
-            ),
+      body: DecoratedBox(
+        decoration: AppTheme.backgroundDecoration(context),
+        child: options.isEmpty
+            ? const _EmptyPaymentState()
+            : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                itemCount: options.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, i) =>
+                    _PaymentOptionCard(option: options[i]),
+              ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'payment_options_fab',
         onPressed: () => _showDialog(context),

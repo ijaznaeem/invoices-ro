@@ -39,9 +39,9 @@ Future<Uint8List> buildProfessionalInvoicePdf({
         pw.SizedBox(height: 18),
         _clientAndMeta(invoice, client),
         pw.SizedBox(height: 18),
-        _lineItemsTable(invoice),
+        _lineItemsTable(invoice, settings),
         pw.SizedBox(height: 16),
-        _totals(invoice),
+        _totals(invoice, settings),
         pw.SizedBox(height: 20),
         _paymentSection(paymentMethod, paymentOptions),
         pw.SizedBox(height: 20),
@@ -201,7 +201,7 @@ pw.Widget _metaRow(String label, String value) {
   );
 }
 
-pw.Widget _lineItemsTable(InvoiceRecord invoice) {
+pw.Widget _lineItemsTable(InvoiceRecord invoice, BusinessSettings? settings) {
   final headerBg = PdfColor.fromHex('#2F6FC0');
   final stripe = PdfColor.fromHex('#EAF3FF');
 
@@ -212,8 +212,8 @@ pw.Widget _lineItemsTable(InvoiceRecord invoice) {
       '${index + 1}',
       _safeAscii(item.description),
       _fmtNum(item.quantity),
-      _money(item.unitPrice),
-      _money(item.lineTotal),
+      _money(item.unitPrice, settings),
+      _money(item.lineTotal, settings),
     ];
   }).toList();
 
@@ -252,7 +252,7 @@ pw.Widget _lineItemsTable(InvoiceRecord invoice) {
   );
 }
 
-pw.Widget _totals(InvoiceRecord invoice) {
+pw.Widget _totals(InvoiceRecord invoice, BusinessSettings? settings) {
   return pw.Row(
     mainAxisAlignment: pw.MainAxisAlignment.end,
     children: [
@@ -260,8 +260,8 @@ pw.Widget _totals(InvoiceRecord invoice) {
         width: 220,
         child: pw.Column(
           children: [
-            _totalRow('Sub Total :', _money(invoice.subtotal)),
-            _totalRow('Tax :', _money(invoice.tax)),
+            _totalRow('Sub Total :', _money(invoice.subtotal, settings)),
+            _totalRow('Tax :', _money(invoice.tax, settings)),
             pw.SizedBox(height: 8),
             pw.Container(
               padding:
@@ -278,7 +278,7 @@ pw.Widget _totals(InvoiceRecord invoice) {
                         fontWeight: pw.FontWeight.bold),
                   ),
                   pw.Text(
-                    _money(invoice.total),
+                    _money(invoice.total, settings),
                     style: pw.TextStyle(
                         fontSize: 12,
                         color: PdfColors.white,
@@ -495,8 +495,11 @@ String _fmtNum(double value) {
   return value.toStringAsFixed(2);
 }
 
-String _money(double value) =>
-    NumberFormat.currency(symbol: r'$', decimalDigits: 2).format(value);
+String _money(double value, BusinessSettings? settings) =>
+    NumberFormat.currency(
+      symbol: settings?.currencySymbol ?? r'$',
+      decimalDigits: 2,
+    ).format(value);
 
 String _safeAscii(String input) {
   final buffer = StringBuffer();

@@ -1,10 +1,13 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 import '../state/app_state_scope.dart';
+import '../theme/app_theme.dart';
+import '../util/currency_utils.dart';
 import 'payment_options_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -18,6 +21,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
 
   late final TextEditingController _businessNameCtrl;
   late final TextEditingController _businessSubtitleCtrl;
@@ -29,6 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _termsCtrl;
 
   String? _logoPath;
+  late String _currencyCode;
   bool _saving = false;
 
   @override
@@ -44,10 +49,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _signatureTitleCtrl = TextEditingController(text: s.signatureTitle);
     _termsCtrl = TextEditingController(text: s.terms ?? '');
     _logoPath = s.logoPath;
+    _currencyCode = currencyOptionForCode(s.currencyCode).code;
   }
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _businessNameCtrl.dispose();
     _businessSubtitleCtrl.dispose();
     _phoneCtrl.dispose();
@@ -84,6 +91,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       address:
           _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
       logoPath: _logoPath,
+      currencyCode: _currencyCode,
+      currencySymbol: currencyOptionForCode(_currencyCode).symbol,
       signatureName: _signatureNameCtrl.text.trim().isEmpty
           ? 'Administrator'
           : _signatureNameCtrl.text.trim(),
@@ -115,117 +124,167 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-          children: [
-            // ─── Business Identity ──────────────────────────────────
-            _sectionLabel('Business Identity'),
-            _logoPickerCard(),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _businessNameCtrl,
-              decoration: const InputDecoration(labelText: 'Business Name'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Required' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _businessSubtitleCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'Tagline / Subtitle'),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _phoneCtrl,
-              decoration: const InputDecoration(labelText: 'Phone'),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _emailCtrl,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _addressCtrl,
-              decoration: const InputDecoration(labelText: 'Address'),
-              maxLines: 2,
-            ),
-
-            // ─── Payment Options link ───────────────────────────────
-            const SizedBox(height: 28),
-            _sectionLabel('Payment Options'),
-            const SizedBox(height: 4),
-            Text(
-              'Bank transfer, card, and other methods printed on invoice PDFs.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 8),
-            Builder(
-              builder: (ctx) {
-                final count = AppStateScope.of(ctx).paymentOptions.length;
-                return Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.account_balance_outlined),
-                    title: const Text('Manage Payment Options'),
-                    subtitle: Text(
-                      count == 0
-                          ? 'No options configured yet'
-                          : '$count option${count == 1 ? '' : 's'} configured',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const PaymentOptionsScreen()),
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            // ─── Invoice Signature ──────────────────────────────────
-            const SizedBox(height: 28),
-            _sectionLabel('Invoice Signature'),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _signatureNameCtrl,
-              decoration: const InputDecoration(labelText: 'Signatory Name'),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _signatureTitleCtrl,
-              decoration: const InputDecoration(labelText: 'Signatory Title'),
-            ),
-
-            // ─── Terms ─────────────────────────────────────────────
-            const SizedBox(height: 28),
-            _sectionLabel('Terms and Conditions'),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _termsCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Terms',
-                alignLabelWithHint: true,
+      body: DecoratedBox(
+        decoration: AppTheme.backgroundDecoration(context),
+        child: SafeArea(
+          child: Form(
+            key: _formKey,
+            child: ScrollConfiguration(
+              behavior: const MaterialScrollBehavior().copyWith(
+                dragDevices: {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                  PointerDeviceKind.stylus,
+                },
               ),
-              maxLines: 4,
-            ),
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                child: ListView(
+                  controller: _scrollController,
+                  primary: false,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    16,
+                    20,
+                    MediaQuery.of(context).viewInsets.bottom + 40,
+                  ),
+                  children: [
+                    // ─── Business Identity ──────────────────────────────────
+                    _sectionLabel('Business Identity'),
+                    _logoPickerCard(),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _businessNameCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'Business Name'),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _businessSubtitleCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Tagline / Subtitle'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _currencyCode,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Currency'),
+                      items: currencyOptions
+                          .map((option) => DropdownMenuItem(
+                                value: option.code,
+                                child: Text(option.label),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _currencyCode = value);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _phoneCtrl,
+                      decoration: const InputDecoration(labelText: 'Phone'),
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _emailCtrl,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _addressCtrl,
+                      decoration: const InputDecoration(labelText: 'Address'),
+                      maxLines: 2,
+                    ),
 
-            const SizedBox(height: 32),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save Settings'),
+                    // ─── Payment Options link ───────────────────────────────
+                    const SizedBox(height: 28),
+                    _sectionLabel('Payment Options'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Bank transfer, card, and other methods printed on invoice PDFs.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (ctx) {
+                        final count =
+                            AppStateScope.of(ctx).paymentOptions.length;
+                        return Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.account_balance_outlined),
+                            title: const Text('Manage Payment Options'),
+                            subtitle: Text(
+                              count == 0
+                                  ? 'No options configured yet'
+                                  : '$count option${count == 1 ? '' : 's'} configured',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const PaymentOptionsScreen()),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // ─── Invoice Signature ──────────────────────────────────
+                    const SizedBox(height: 28),
+                    _sectionLabel('Invoice Signature'),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _signatureNameCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'Signatory Name'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _signatureTitleCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'Signatory Title'),
+                    ),
+
+                    // ─── Terms ─────────────────────────────────────────────
+                    const SizedBox(height: 28),
+                    _sectionLabel('Terms and Conditions'),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _termsCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Terms',
+                        alignLabelWithHint: true,
+                      ),
+                      maxLines: 4,
+                    ),
+
+                    const SizedBox(height: 32),
+                    FilledButton(
+                      onPressed: _saving ? null : _save,
+                      child: _saving
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Save Settings'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );

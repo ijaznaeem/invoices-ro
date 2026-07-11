@@ -347,6 +347,8 @@ class BusinessSettings {
   final String? email;
   final String? address;
   final String? logoPath;
+  final String currencyCode;
+  final String currencySymbol;
   final String signatureName;
   final String signatureTitle;
   final String? terms;
@@ -358,6 +360,8 @@ class BusinessSettings {
     this.email,
     this.address,
     this.logoPath,
+    this.currencyCode = 'USD',
+    this.currencySymbol = r'$',
     this.signatureName = 'Administrator',
     this.signatureTitle = 'Administrator',
     this.terms,
@@ -371,6 +375,8 @@ class BusinessSettings {
         'email': email,
         'address': address,
         'logo_path': logoPath,
+        'currency_code': currencyCode,
+        'currency_symbol': currencySymbol,
         'signature_name': signatureName,
         'signature_title': signatureTitle,
         'terms': terms,
@@ -385,6 +391,8 @@ class BusinessSettings {
         email: map['email'] as String?,
         address: map['address'] as String?,
         logoPath: map['logo_path'] as String?,
+        currencyCode: map['currency_code'] as String? ?? 'USD',
+        currencySymbol: map['currency_symbol'] as String? ?? r'$',
         signatureName: map['signature_name'] as String? ?? 'Administrator',
         signatureTitle: map['signature_title'] as String? ?? 'Administrator',
         terms: map['terms'] as String?,

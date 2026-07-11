@@ -107,7 +107,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         actions: [
           IconButton(
             tooltip: 'Run generation check',
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: () async {
               final generated = await state.runGenerationCheck();
               if (context.mounted) {
@@ -125,7 +125,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             children: [
               IconButton(
                 tooltip: 'Activity',
-                icon: const Icon(Icons.notifications_none),
+                icon: const Icon(Icons.notifications_active_rounded),
                 onPressed: () {
                   setState(() => _index = 0);
                   state.markNotificationsRead();
@@ -162,24 +162,29 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         },
         onToggleTheme: widget.onToggleTheme,
       ),
-      body: IndexedStack(index: _index, children: _screens),
+      body: DecoratedBox(
+        decoration: AppTheme.backgroundDecoration(context),
+        child: IndexedStack(index: _index, children: _screens),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard),
+              icon: Icon(Icons.dashboard_rounded),
+              selectedIcon: Icon(Icons.dashboard_rounded),
               label: 'Dashboard'),
           NavigationDestination(
-              icon: Icon(Icons.autorenew), label: 'Recurring'),
+              icon: Icon(Icons.account_balance_wallet_rounded),
+              selectedIcon: Icon(Icons.account_balance_wallet_rounded),
+              label: 'Recurring'),
           NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined),
-              selectedIcon: Icon(Icons.receipt_long),
+              icon: Icon(Icons.shopping_cart_checkout_rounded),
+              selectedIcon: Icon(Icons.shopping_cart_checkout_rounded),
               label: 'Invoices'),
           NavigationDestination(
-              icon: Icon(Icons.people_outline),
-              selectedIcon: Icon(Icons.people),
+              icon: Icon(Icons.people_alt_rounded),
+              selectedIcon: Icon(Icons.people_alt_rounded),
               label: 'Clients'),
         ],
       ),
@@ -204,17 +209,25 @@ class _LedgerDrawer extends StatelessWidget {
 
   static const _navItems = [
     (
-      icon: Icons.dashboard_outlined,
-      activeIcon: Icons.dashboard,
+      icon: Icons.dashboard_rounded,
+      activeIcon: Icons.dashboard_rounded,
       label: 'Dashboard'
     ),
-    (icon: Icons.autorenew, activeIcon: Icons.autorenew, label: 'Recurring'),
     (
-      icon: Icons.receipt_long_outlined,
-      activeIcon: Icons.receipt_long,
+      icon: Icons.account_balance_wallet_rounded,
+      activeIcon: Icons.account_balance_wallet_rounded,
+      label: 'Recurring'
+    ),
+    (
+      icon: Icons.shopping_cart_checkout_rounded,
+      activeIcon: Icons.shopping_cart_checkout_rounded,
       label: 'Invoices'
     ),
-    (icon: Icons.people_outline, activeIcon: Icons.people, label: 'Clients'),
+    (
+      icon: Icons.people_alt_rounded,
+      activeIcon: Icons.people_alt_rounded,
+      label: 'Clients'
+    ),
   ];
 
   @override
@@ -275,7 +288,7 @@ class _LedgerDrawer extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.account_balance_outlined),
+            leading: const Icon(Icons.account_balance_wallet_rounded),
             title: const Text('Payment Options'),
             trailing: optionCount > 0
                 ? Container(
@@ -307,7 +320,7 @@ class _LedgerDrawer extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.settings_outlined),
+            leading: const Icon(Icons.settings_rounded),
             title: const Text('Settings'),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -331,7 +344,7 @@ class _LedgerDrawer extends StatelessWidget {
           // ─── Appearance toggle ───────────────────────────────────
           SwitchListTile(
             secondary: Icon(
-                isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined),
+                isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded),
             title: const Text('Dark mode'),
             value: isDark,
             onChanged: (_) => onToggleTheme(),
@@ -358,7 +371,7 @@ class _DrawerHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [LedgerColors.inkStrong, Color(0xFF2D5A3D)],
+          colors: [LedgerColors.primary, LedgerColors.secondary],
         ),
       ),
       padding: EdgeInsets.only(

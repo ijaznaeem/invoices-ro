@@ -64,6 +64,7 @@ class ClientsScreen extends StatelessWidget {
                       subtitle: [c.email, c.phone]
                           .where((s) => s != null && s.isNotEmpty)
                           .join(' · '),
+                      onTap: () => _showClientSheet(context, client: c),
                     ),
                   );
                 },
@@ -71,20 +72,21 @@ class ClientsScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'clients_fab',
-        onPressed: () => _showAddClientSheet(context),
+        onPressed: () => _showClientSheet(context),
         icon: const Icon(Icons.add),
         label: const Text('New client'),
       ),
     );
   }
 
-  void _showAddClientSheet(BuildContext context) {
+  void _showClientSheet(BuildContext context, {Client? client}) {
     final state = AppStateScope.of(context);
     final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final addressCtrl = TextEditingController();
+    final nameCtrl = TextEditingController(text: client?.name ?? '');
+    final emailCtrl = TextEditingController(text: client?.email ?? '');
+    final phoneCtrl = TextEditingController(text: client?.phone ?? '');
+    final addressCtrl = TextEditingController(text: client?.address ?? '');
+    final isEditing = client != null;
 
     showModalBottomSheet(
       context: context,
@@ -104,7 +106,7 @@ class ClientsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('New client',
+              Text(isEditing ? 'Edit client' : 'New client',
                   style: Theme.of(sheetContext).textTheme.titleLarge),
               const SizedBox(height: 16),
               TextFormField(
@@ -133,7 +135,8 @@ class ClientsScreen extends StatelessWidget {
               FilledButton(
                 onPressed: () async {
                   if (!(formKey.currentState?.validate() ?? false)) return;
-                  await state.addClient(Client(
+                  final savedClient = Client(
+                    id: client?.id,
                     name: nameCtrl.text.trim(),
                     email: emailCtrl.text.trim().isEmpty
                         ? null
@@ -144,15 +147,25 @@ class ClientsScreen extends StatelessWidget {
                     address: addressCtrl.text.trim().isEmpty
                         ? null
                         : addressCtrl.text.trim(),
-                  ));
+                  );
+                  if (isEditing) {
+                    await state.updateClient(savedClient);
+                  } else {
+                    await state.addClient(savedClient);
+                  }
                   if (sheetContext.mounted) Navigator.pop(sheetContext);
                 },
-                child: const Text('Add client'),
+                child: Text(isEditing ? 'Save changes' : 'Add client'),
               ),
             ],
           ),
         ),
       ),
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      emailCtrl.dispose();
+      phoneCtrl.dispose();
+      addressCtrl.dispose();
+    });
   }
 }

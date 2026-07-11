@@ -24,7 +24,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'ledger.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE clients (
@@ -86,6 +86,8 @@ class DatabaseHelper {
             email TEXT,
             address TEXT,
             logo_path TEXT,
+            currency_code TEXT NOT NULL DEFAULT 'USD',
+            currency_symbol TEXT NOT NULL DEFAULT '\$',
             payment_bank_name TEXT,
             payment_account_number TEXT,
             payment_swift TEXT,
@@ -135,8 +137,35 @@ class DatabaseHelper {
             )
           ''');
         }
+        if (oldVersion < 4) {
+          await _addColumnIfMissing(
+            db,
+            'business_settings',
+            'currency_code',
+            "TEXT NOT NULL DEFAULT 'USD'",
+          );
+          await _addColumnIfMissing(
+            db,
+            'business_settings',
+            'currency_symbol',
+            "TEXT NOT NULL DEFAULT '\$'",
+          );
+        }
       },
     );
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = info.any((row) => row['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+    }
   }
 
   // ---------- Clients ----------
@@ -155,6 +184,7 @@ class DatabaseHelper {
 
   Future<void> deleteClient(int id) async {
     final db = await database;
+    await db.delete('templates', where: 'client_id = ?', whereArgs: [id]);
     await db.delete('clients', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -232,6 +262,16 @@ class DatabaseHelper {
     await db.insert('invoices', invoice.toMap());
   }
 
+  Future<void> updateInvoice(InvoiceRecord invoice) async {
+    final db = await database;
+    await db.update(
+      'invoices',
+      invoice.toMap(),
+      where: 'id = ?',
+      whereArgs: [invoice.id],
+    );
+  }
+
   Future<int> countInvoices() async {
     final db = await database;
     final result = await db.rawQuery('SELECT COUNT(*) as c FROM invoices');
@@ -242,7 +282,7 @@ class DatabaseHelper {
     final db = await database;
     final rows = await db.rawQuery('''
       SELECT i.*, c.name as client_name
-      FROM invoices i JOIN clients c ON c.id = i.client_id
+      FROM invoices i LEFT JOIN clients c ON c.id = i.client_id
       ORDER BY i.due_date DESC
     ''');
     var invoices = rows.map((r) => InvoiceRecord.fromMap(r)).toList();

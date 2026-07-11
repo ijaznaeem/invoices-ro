@@ -6,25 +6,37 @@ class StatCard extends StatelessWidget {
   final String value;
   final Color? valueColor;
 
-  const StatCard({super.key, required this.label, required this.value, this.valueColor});
+  const StatCard({
+    super.key,
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
+    return Container(
+      decoration: AppTheme.cardDecoration(context),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label.toUpperCase(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(letterSpacing: 0.6),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
-            const SizedBox(height: 8),
+            const Spacer(),
             Text(
               value,
-              style: AppTheme.mono(size: 22, color: valueColor ?? Theme.of(context).textTheme.titleLarge?.color),
+              style: AppTheme.mono(
+                size: 22,
+                color:
+                    valueColor ?? Theme.of(context).textTheme.titleLarge?.color,
+              ),
             ),
           ],
         ),
