@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -13,6 +15,11 @@ class DatabaseHelper {
 
   Database? _db;
 
+  Future<String> get databasePath async {
+    final dbPath = await getDatabasesPath();
+    return join(dbPath, 'ledger.db');
+  }
+
   Future<Database> get database async {
     if (_db != null) return _db!;
     _db = await _initDb();
@@ -20,8 +27,7 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDb() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'ledger.db');
+    final path = await databasePath;
     return openDatabase(
       path,
       version: 4,
@@ -153,6 +159,25 @@ class DatabaseHelper {
         }
       },
     );
+  }
+
+  /// Produces a transactionally consistent standalone SQLite snapshot.
+  Future<void> createSnapshot(String destinationPath) async {
+    final db = await database;
+    final destination = File(destinationPath);
+    if (await destination.exists()) await destination.delete();
+    final escaped = destinationPath.replaceAll("'", "''");
+    await db.execute("VACUUM INTO '$escaped'");
+  }
+
+  /// Replaces the live database. Callers must reload all application state.
+  Future<void> restoreSnapshot(String sourcePath) async {
+    await _db?.close();
+    _db = null;
+    final target = File(await databasePath);
+    await target.parent.create(recursive: true);
+    await File(sourcePath).copy(target.path);
+    await database;
   }
 
   Future<void> _addColumnIfMissing(

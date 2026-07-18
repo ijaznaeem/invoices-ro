@@ -141,9 +141,7 @@ class InvoicesScreen extends StatelessWidget {
             ListTile(
               leading:
                   const Icon(Icons.picture_as_pdf_outlined, color: Colors.blue),
-              title: const Text('Preview professional PDF'),
-              subtitle:
-                  const Text('Styled invoice layout with payment options'),
+              title: const Text('Preview PDF'),
               onTap: () async {
                 Navigator.pop(context);
                 final paymentMethod =

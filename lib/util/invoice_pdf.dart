@@ -32,8 +32,16 @@ Future<Uint8List> buildProfessionalInvoicePdf({
 
   doc.addPage(
     pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(34, 30, 34, 28),
+      pageTheme: pw.PageTheme(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(34, 30, 34, 28),
+        // PDF pages are transparent unless a background is explicitly
+        // painted. Some image viewers render that transparency as black.
+        buildBackground: (_) => pw.FullPage(
+          ignoreMargins: true,
+          child: pw.Container(color: PdfColors.white),
+        ),
+      ),
       build: (context) => [
         _header(invoice, dateLabel, bizName, bizSubtitle, logo),
         pw.SizedBox(height: 18),
@@ -47,7 +55,7 @@ Future<Uint8List> buildProfessionalInvoicePdf({
         pw.SizedBox(height: 20),
         _termsAndSignature(settings),
         pw.SizedBox(height: 14),
-        _footer(client, settings),
+        _footer(settings),
       ],
     ),
   );
@@ -95,12 +103,12 @@ pw.Widget _header(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    'INVOICES RO',
+                    businessName,
                     style: pw.TextStyle(
                         fontSize: 17, fontWeight: pw.FontWeight.bold),
                   ),
                   pw.Text(
-                    'Creative Agency Billing',
+                    businessSubtitle,
                     style: const pw.TextStyle(
                         fontSize: 10, color: PdfColors.grey700),
                   ),
@@ -435,7 +443,7 @@ pw.Widget _termsAndSignature(BusinessSettings? settings) {
   );
 }
 
-pw.Widget _footer(Client? client, BusinessSettings? settings) {
+pw.Widget _footer(BusinessSettings? settings) {
   final accent = PdfColor.fromHex('#3BA7F2');
 
   return pw.Column(
@@ -445,12 +453,9 @@ pw.Widget _footer(Client? client, BusinessSettings? settings) {
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          _footerItem('Phone',
-              _safeAscii(settings?.phone ?? client?.phone ?? ''), accent),
-          _footerItem('Email',
-              _safeAscii(settings?.email ?? client?.email ?? ''), accent),
-          _footerItem('Address',
-              _safeAscii(settings?.address ?? client?.address ?? ''), accent),
+          _footerItem('Phone', _safeAscii(settings?.phone ?? ''), accent),
+          _footerItem('Email', _safeAscii(settings?.email ?? ''), accent),
+          _footerItem('Address', _safeAscii(settings?.address ?? ''), accent),
         ],
       ),
     ],

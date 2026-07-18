@@ -35,12 +35,25 @@ dependencies:
   fl_chart: ^0.68.0
   pdf: ^3.11.1
   printing: ^5.13.4
+  share_plus: ^11.1.0
   image_picker: ^1.1.2
+  shared_preferences: ^2.5.5
+  file_picker: ^11.0.2
+  archive: ^4.0.9
+  google_sign_in: 6.2.2
+  googleapis: 13.2.0
+  extension_google_sign_in_as_googleapis_auth: 2.0.12
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  image_path: "assets/icons/ledger_app_icon.png"
+  min_sdk_android: 21
 
 flutter:
 

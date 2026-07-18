@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'screens/clients_screen.dart';
+import 'screens/backup_restore_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/invoices_screen.dart';
 import 'screens/payment_options_screen.dart';
@@ -94,6 +95,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // backgrounded — the mobile equivalent of the web app's hourly server check.
     if (state == AppLifecycleState.resumed) {
       AppStateScope.of(context).runGenerationCheck();
+      AppStateScope.of(context).runBackupCheck();
     }
   }
 
@@ -316,6 +318,20 @@ class _LedgerDrawer extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const PaymentOptionsScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.backup_rounded),
+            title: const Text('Backup & Restore'),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BackupRestoreScreen()),
               );
             },
           ),

@@ -1,11 +1,11 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/models.dart';
+import '../services/public_file_service.dart';
 import '../util/invoice_pdf.dart';
 
 class InvoicePdfPreviewScreen extends StatefulWidget {
@@ -80,15 +80,26 @@ class _InvoicePdfPreviewScreenState extends State<InvoicePdfPreviewScreen> {
       appBar: AppBar(
         title: Text('PDF Preview - ${widget.invoice.invoiceNumber}'),
         actions: [
-          IconButton(
-            tooltip: 'Download PDF',
-            onPressed: () => _downloadPdf(context),
+          PopupMenuButton<String>(
+            tooltip: 'Download invoice',
             icon: const Icon(Icons.download_outlined),
+            onSelected: (value) => value == 'pdf'
+                ? _downloadPdf(context)
+                : _downloadImages(context),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'pdf', child: Text('Download PDF')),
+              PopupMenuItem(value: 'image', child: Text('Download as image')),
+            ],
           ),
-          IconButton(
-            tooltip: 'Share PDF',
-            onPressed: () => _sharePdf(context),
+          PopupMenuButton<String>(
+            tooltip: 'Share invoice',
             icon: const Icon(Icons.share_outlined),
+            onSelected: (value) =>
+                value == 'pdf' ? _sharePdf(context) : _shareImages(context),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'pdf', child: Text('Share PDF')),
+              PopupMenuItem(value: 'image', child: Text('Share as image')),
+            ],
           ),
         ],
       ),
@@ -144,22 +155,66 @@ class _InvoicePdfPreviewScreenState extends State<InvoicePdfPreviewScreen> {
   }
 
   String get _pdfFileName => 'invoice_${widget.invoice.invoiceNumber}.pdf';
+  String _imageFileName(int page, int pageCount) =>
+      'invoice_${widget.invoice.invoiceNumber}'
+      '${pageCount == 1 ? '' : '_page_${page + 1}'}.png';
 
   Future<void> _downloadPdf(BuildContext context) async {
     try {
       final bytes = await _getPdfBytes();
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}${Platform.pathSeparator}$_pdfFileName');
-      await file.writeAsBytes(bytes, flush: true);
+      final path = await PublicFileService.saveToDownloads(
+        fileName: _pdfFileName,
+        mimeType: 'application/pdf',
+        bytes: bytes,
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF saved to ${file.path}')),
+          SnackBar(content: Text('PDF saved to $path')),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to download PDF: $e')),
+        );
+      }
+    }
+  }
+
+  Future<List<Uint8List>> _getInvoiceImages() async {
+    final pdf = await _getPdfBytes();
+    final images = <Uint8List>[];
+    await for (final page in Printing.raster(pdf, dpi: 180)) {
+      images.add(await page.toPng());
+    }
+    if (images.isEmpty) throw StateError('The PDF contains no pages.');
+    return images;
+  }
+
+  Future<void> _downloadImages(BuildContext context) async {
+    try {
+      final images = await _getInvoiceImages();
+      String? lastPath;
+      for (var i = 0; i < images.length; i++) {
+        lastPath = await PublicFileService.saveToDownloads(
+          fileName: _imageFileName(i, images.length),
+          mimeType: 'image/png',
+          bytes: images[i],
+        );
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(images.length == 1
+                ? 'Invoice image saved to $lastPath'
+                : '${images.length} invoice page images saved to Downloads/Ledger'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to download image: $e')),
         );
       }
     }
@@ -173,6 +228,29 @@ class _InvoicePdfPreviewScreenState extends State<InvoicePdfPreviewScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to share PDF: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareImages(BuildContext context) async {
+    try {
+      final images = await _getInvoiceImages();
+      await SharePlus.instance.share(ShareParams(
+        files: [
+          for (var i = 0; i < images.length; i++)
+            XFile.fromData(
+              images[i],
+              mimeType: 'image/png',
+              name: _imageFileName(i, images.length),
+            ),
+        ],
+        subject: 'Invoice ${widget.invoice.invoiceNumber}',
+      ));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to share image: $e')),
         );
       }
     }

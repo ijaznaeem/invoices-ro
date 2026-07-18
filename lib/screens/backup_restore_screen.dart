@@ -1,0 +1,351 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
+
+import '../services/backup_service.dart';
+import '../state/app_state_scope.dart';
+import '../theme/app_theme.dart';
+
+class BackupRestoreScreen extends StatefulWidget {
+  const BackupRestoreScreen({super.key});
+
+  @override
+  State<BackupRestoreScreen> createState() => _BackupRestoreScreenState();
+}
+
+class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
+  final _service = BackupService.instance;
+  final _customDaysController = TextEditingController();
+  final _keepLastController = TextEditingController();
+  BackupPreferences _preferences = const BackupPreferences();
+  List<File> _backups = [];
+  String? _googleAccount;
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _customDaysController.dispose();
+    _keepLastController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final results = await Future.wait([
+      _service.loadPreferences(),
+      _service.listBackups(),
+      _service.connectedGoogleAccount,
+    ]);
+    if (!mounted) return;
+    _preferences = results[0] as BackupPreferences;
+    _backups = results[1] as List<File>;
+    _googleAccount = results[2] as String?;
+    _customDaysController.text = '${_preferences.customDays}';
+    _keepLastController.text = '${_preferences.keepLast}';
+    setState(() => _loading = false);
+  }
+
+  Future<void> _savePreferences() async {
+    final customDays = int.tryParse(_customDaysController.text) ?? 1;
+    final keepLast = int.tryParse(_keepLastController.text) ?? 1;
+    _preferences = _preferences.copyWith(
+      customDays: customDays.clamp(1, 365),
+      keepLast: keepLast.clamp(1, 100),
+    );
+    _customDaysController.text = '${_preferences.customDays}';
+    _keepLastController.text = '${_preferences.keepLast}';
+    await _service.savePreferences(_preferences);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Backup schedule saved.')),
+      );
+    }
+  }
+
+  Future<void> _createBackup() async {
+    await _runBusy(() async {
+      await _savePreferences();
+      final backup = await _service.createBackup(preferences: _preferences);
+      await _refreshBackups();
+      if (mounted) {
+        final cloudError = _service.lastCloudError;
+        _showMessage(cloudError == null
+            ? 'Backup created: ${p.basename(backup.path)}'
+            : 'Local backup created. Drive upload failed: $cloudError');
+      }
+    });
+  }
+
+  Future<void> _export(File backup) async {
+    await _runBusy(() async {
+      await _service.exportBackup(backup);
+      if (mounted) _showMessage('Backup exported.');
+    });
+  }
+
+  Future<void> _pickAndRestore() async {
+    final backup = await _service.pickBackup();
+    if (backup != null) await _confirmRestore(backup);
+  }
+
+  Future<void> _confirmRestore(File backup) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restore this backup?'),
+        content: const Text(
+          'Current clients, invoices, schedules, payment options, and settings '
+          'will be replaced. A safety backup of the current data will be created first.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Restore')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _runBusy(() async {
+      await _service.createBackup(
+          preferences: _preferences.copyWith(uploadToDrive: false));
+      await _service.restoreBackup(backup);
+      if (!mounted) return;
+      await AppStateScope.of(context).bootstrap();
+      await _refreshBackups();
+      if (mounted) _showMessage('Backup restored successfully.');
+    });
+  }
+
+  Future<void> _delete(File backup) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete backup?'),
+        content: Text(p.basename(backup.path)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _service.deleteBackup(backup);
+      await _refreshBackups();
+    }
+  }
+
+  Future<void> _setDriveEnabled(bool enabled) async {
+    if (enabled) {
+      try {
+        final email = await _service.connectGoogleDrive();
+        _googleAccount = email;
+      } catch (error) {
+        if (mounted) _showMessage('$error');
+        return;
+      }
+    } else {
+      await _service.disconnectGoogleDrive();
+      _googleAccount = null;
+    }
+    _preferences = _preferences.copyWith(uploadToDrive: enabled);
+    await _service.savePreferences(_preferences);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _refreshBackups() async {
+    _preferences = await _service.loadPreferences();
+    _backups = await _service.listBackups();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _runBusy(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+    } catch (error) {
+      if (mounted) _showMessage('Operation failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Backup & Restore')),
+      body: DecoratedBox(
+        decoration: AppTheme.backgroundDecoration(context),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                children: [
+                  _sectionTitle('Automatic local backup'),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          DropdownButtonFormField<BackupFrequency>(
+                            initialValue: _preferences.frequency,
+                            decoration:
+                                const InputDecoration(labelText: 'Frequency'),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: BackupFrequency.daily,
+                                  child: Text('Daily')),
+                              DropdownMenuItem(
+                                  value: BackupFrequency.weekly,
+                                  child: Text('Weekly')),
+                              DropdownMenuItem(
+                                  value: BackupFrequency.custom,
+                                  child: Text('Every N days')),
+                            ],
+                            onChanged: (value) => setState(() {
+                              if (value != null) {
+                                _preferences =
+                                    _preferences.copyWith(frequency: value);
+                              }
+                            }),
+                          ),
+                          if (_preferences.frequency ==
+                              BackupFrequency.custom) ...[
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _customDaysController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Number of days'),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _keepLastController,
+                            decoration: const InputDecoration(
+                              labelText: 'Keep last N backups',
+                              helperText:
+                                  'Older local and Drive backups are removed automatically.',
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                                onPressed: _busy ? null : _savePreferences,
+                                child: const Text('Save schedule')),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _sectionTitle('Google Drive'),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: SwitchListTile(
+                      secondary: const Icon(Icons.add_to_drive_outlined),
+                      title: const Text('Upload after each backup'),
+                      subtitle: Text(_googleAccount ??
+                          'Not connected — local backup remains enabled'),
+                      value: _preferences.uploadToDrive,
+                      onChanged: _busy ? null : _setDriveEnabled,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                          child: FilledButton.icon(
+                        onPressed: _busy ? null : _createBackup,
+                        icon: const Icon(Icons.backup_outlined),
+                        label: const Text('Back up now'),
+                      )),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _pickAndRestore,
+                        icon: const Icon(Icons.upload_file_outlined),
+                        label: const Text('Import backup'),
+                      )),
+                    ],
+                  ),
+                  if (_busy) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(),
+                  ],
+                  const SizedBox(height: 28),
+                  _sectionTitle('Local backups (${_backups.length})'),
+                  const SizedBox(height: 8),
+                  if (_backups.isEmpty)
+                    const Card(
+                        child: ListTile(
+                      leading: Icon(Icons.inventory_2_outlined),
+                      title: Text('No backups yet'),
+                      subtitle: Text(
+                          'Your first backup is created automatically when due.'),
+                    ))
+                  else
+                    ..._backups.map(_backupTile),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _backupTile(File file) {
+    final modified = file.lastModifiedSync();
+    final sizeMb = file.lengthSync() / (1024 * 1024);
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.storage_outlined),
+        title: Text(DateFormat.yMMMd().add_jm().format(modified)),
+        subtitle:
+            Text('${sizeMb.toStringAsFixed(2)} MB · ${p.basename(file.path)}'),
+        onTap: _busy ? null : () => _confirmRestore(file),
+        trailing: PopupMenuButton<String>(
+          onSelected: (action) {
+            if (action == 'restore') _confirmRestore(file);
+            if (action == 'export') _export(file);
+            if (action == 'delete') _delete(file);
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'restore', child: Text('Restore')),
+            PopupMenuItem(value: 'export', child: Text('Export a copy')),
+            PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) => Text(
+        text.toUpperCase(),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              letterSpacing: .8,
+              fontWeight: FontWeight.w700,
+            ),
+      );
+}

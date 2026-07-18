@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../db/database_helper.dart';
 import '../db/generation_engine.dart';
 import '../models/models.dart';
+import '../services/backup_service.dart';
 import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
 
@@ -40,6 +41,15 @@ class AppState extends ChangeNotifier {
       reloadBusinessSettings(),
       reloadPaymentOptions(),
     ]);
+    await runBackupCheck();
+  }
+
+  Future<void> runBackupCheck() async {
+    try {
+      await BackupService.instance.createBackupIfDue();
+    } catch (error) {
+      debugPrint('Automatic backup failed: $error');
+    }
   }
 
   Future<int> runGenerationCheck({bool silent = false}) async {
