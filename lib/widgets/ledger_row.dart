@@ -16,10 +16,7 @@ Color _tickColor(LedgerTick tick) {
   }
 }
 
-/// A single ruled row — the ledger-book detail carried over from the web
-/// app. A colored tick on the left signals status at a glance, a title +
-/// subtitle sit in the middle, and a right-aligned monospace figure (an
-/// amount or a date) closes the row like a real ledger column.
+/// Compact transaction-style row inspired by the bKash card list.
 class LedgerRow extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -48,33 +45,45 @@ class LedgerRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(9),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: .7),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
+              color: Colors.black.withValues(alpha: 0.09),
+              blurRadius: 14,
+              offset: const Offset(2, 6),
             ),
           ],
         ),
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        padding: const EdgeInsets.fromLTRB(8, 9, 12, 9),
         child: Row(
           children: [
             Container(
-              width: 4,
-              height: 42,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
+                color: _tickColor(tick).withValues(alpha: .11),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                switch (tick) {
+                  LedgerTick.paid => Icons.check_rounded,
+                  LedgerTick.pending => Icons.schedule_rounded,
+                  LedgerTick.overdue => Icons.priority_high_rounded,
+                  LedgerTick.neutral => Icons.receipt_long_rounded,
+                },
                 color: _tickColor(tick),
-                borderRadius: BorderRadius.circular(20),
+                size: 25,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,7 +98,7 @@ class LedgerRow extends StatelessWidget {
                             letterSpacing: 0.2,
                           ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                   ],
                   Text(
                     title,
@@ -97,7 +106,7 @@ class LedgerRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: Theme.of(context).textTheme.bodySmall,
@@ -141,7 +150,8 @@ class LedgerRow extends StatelessWidget {
                           trailingSubtitle!,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontSize: 11,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
                                   ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

@@ -17,29 +17,44 @@ class StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: AppTheme.cardDecoration(context),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label.toUpperCase(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    letterSpacing: 0.6,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const Spacer(),
-            Text(
-              value,
-              style: AppTheme.mono(
-                size: 22,
+      child: Stack(
+        children: [
+          Positioned(
+            right: -12,
+            top: -15,
+            child: Container(
+              width: 65,
+              height: 65,
+              decoration: BoxDecoration(
                 color:
-                    valueColor ?? Theme.of(context).textTheme.titleLarge?.color,
+                    (valueColor ?? LedgerColors.primary).withValues(alpha: .09),
+                shape: BoxShape.circle,
               ),
             ),
-          ],
-        ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+                const Spacer(),
+                Text(
+                  value,
+                  style: AppTheme.mono(
+                    size: 21,
+                    color: valueColor ?? LedgerColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

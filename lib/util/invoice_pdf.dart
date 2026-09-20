@@ -155,19 +155,21 @@ pw.Widget _clientAndMeta(InvoiceRecord invoice, Client? client) {
                     const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
             pw.SizedBox(height: 6),
             pw.Text(
-              _safeAscii(client?.name ?? invoice.clientName ?? 'Client'),
+              _safeAscii(invoice.clientName ?? client?.name ?? 'Client'),
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 4),
-            if ((client?.phone ?? '').trim().isNotEmpty)
-              pw.Text(_safeAscii(client!.phone!),
+            if ((invoice.clientPhone ?? client?.phone ?? '').trim().isNotEmpty)
+              pw.Text(_safeAscii(invoice.clientPhone ?? client!.phone!),
                   style: const pw.TextStyle(fontSize: 10)),
-            if ((client?.email ?? '').trim().isNotEmpty)
-              pw.Text(_safeAscii(client!.email!),
+            if ((invoice.clientEmail ?? client?.email ?? '').trim().isNotEmpty)
+              pw.Text(_safeAscii(invoice.clientEmail ?? client!.email!),
                   style: const pw.TextStyle(
                       fontSize: 10, color: PdfColors.grey700)),
-            if ((client?.address ?? '').trim().isNotEmpty)
-              pw.Text(_safeAscii(client!.address!),
+            if ((invoice.clientAddress ?? client?.address ?? '')
+                .trim()
+                .isNotEmpty)
+              pw.Text(_safeAscii(invoice.clientAddress ?? client!.address!),
                   style: const pw.TextStyle(
                       fontSize: 10, color: PdfColors.grey700)),
           ],

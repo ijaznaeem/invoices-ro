@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../state/app_state_scope.dart';
 import '../theme/app_theme.dart';
 import '../util/currency_utils.dart';
+import 'accounts_screens.dart';
 import 'payment_options_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -205,6 +206,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       controller: _addressCtrl,
                       decoration: const InputDecoration(labelText: 'Address'),
                       maxLines: 2,
+                    ),
+
+                    // ─── Tax rates ───────────────────────────────────────────
+                    const SizedBox(height: 28),
+                    _sectionLabel('Tax Rates'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Percentages selectable on invoices. Default is No Tax (0%).',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (ctx) {
+                        final count = AppStateScope.of(ctx).taxRates.length;
+                        return Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.percent_rounded),
+                            title: const Text('Manage Tax Rates'),
+                            subtitle: Text(
+                              count == 0
+                                  ? 'No tax rates yet'
+                                  : '$count rate${count == 1 ? '' : 's'} configured',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const TaxRatesScreen()),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // ─── Expense heads ──────────────────────────────────────
+                    const SizedBox(height: 28),
+                    _sectionLabel('Expense Heads'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Categories used when recording business expenses.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (ctx) {
+                        final count =
+                            AppStateScope.of(ctx).expenseHeads.length;
+                        return Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.category_outlined),
+                            title: const Text('Manage Expense Heads'),
+                            subtitle: Text(
+                              count == 0
+                                  ? 'No heads configured yet'
+                                  : '$count head${count == 1 ? '' : 's'} configured',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const ExpenseHeadsScreen()),
+                            ),
+                          ),
+                        );
+                      },
                     ),
 
                     // ─── Payment Options link ───────────────────────────────

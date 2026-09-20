@@ -20,6 +20,11 @@ class StatusPill extends StatelessWidget {
             label: status,
             foreground: LedgerColors.paid,
             background: LedgerColors.paidBg);
+      case 'Partial':
+        return const StatusPill(
+            label: 'Partial',
+            foreground: Color(0xFF2563EB),
+            background: Color(0xFFEFF6FF));
       case 'Overdue':
         return StatusPill(
             label: status,

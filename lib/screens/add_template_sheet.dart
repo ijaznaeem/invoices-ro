@@ -5,6 +5,7 @@ import '../state/app_state_scope.dart';
 import '../theme/app_theme.dart';
 import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
+import '../widgets/searchable_dropdown.dart';
 
 class _ItemDraft {
   final descriptionController = TextEditingController();
@@ -53,7 +54,7 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
   EndType _endType = EndType.never;
   final _endValueController = TextEditingController();
   DateTime? _endDate;
-  final _taxRateController = TextEditingController(text: '0');
+  int? _selectedTaxId;
   final _notesController = TextEditingController();
   bool _saving = false;
 
@@ -64,6 +65,32 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
       });
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initTaxSelection());
+  }
+
+  Future<void> _initTaxSelection() async {
+    final state = AppStateScope.of(context);
+    if (state.taxRates.isEmpty) {
+      await state.reloadTaxRates();
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedTaxId = state.defaultTaxRate.id ?? state.taxRates.firstOrNull?.id;
+    });
+  }
+
+  TaxRate? _resolveTax(List<TaxRate> rates) {
+    if (rates.isEmpty) return null;
+    if (_selectedTaxId != null) {
+      final found = rates.where((r) => r.id == _selectedTaxId).firstOrNull;
+      if (found != null) return found;
+    }
+    return rates.where((r) => r.ratePercent == 0).firstOrNull ?? rates.first;
+  }
+
+  @override
   void dispose() {
     for (final item in _items) {
       item.dispose();
@@ -71,7 +98,6 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
     _intervalDaysController.dispose();
     _paymentTermsController.dispose();
     _endValueController.dispose();
-    _taxRateController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -107,14 +133,30 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                 controller: scrollController,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 children: [
-                  DropdownButtonFormField<int>(
-                    initialValue: _clientId,
-                    decoration: const InputDecoration(labelText: 'Client'),
+                  SearchableDropdown<int>(
+                    label: 'Client',
+                    hint: 'Select a client',
+                    searchHint: 'Search clients…',
+                    prefixIcon: Icons.person_search_rounded,
+                    value: _clientId,
+                    emptyMessage: 'No clients match your search',
                     items: state.clients
-                        .map((c) =>
-                            DropdownMenuItem(value: c.id!, child: Text(c.name)))
+                        .where((c) => c.id != null)
+                        .map((c) {
+                          final details = [
+                            if (c.email?.trim().isNotEmpty == true) c.email!,
+                            if (c.phone?.trim().isNotEmpty == true) c.phone!,
+                          ].join(' · ');
+                          return SearchableOption<int>(
+                            value: c.id!,
+                            label: c.name,
+                            subtitle: details.isEmpty ? null : details,
+                            searchText:
+                                '${c.name} ${c.email ?? ''} ${c.phone ?? ''}',
+                          );
+                        })
                         .toList(),
-                    onChanged: (v) => setState(() => _clientId = v),
+                    onChanged: (id) => setState(() => _clientId = id),
                     validator: (v) => v == null ? 'Choose a client' : null,
                   ),
                   _sectionLabel('Line items'),
@@ -237,14 +279,35 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                       ),
                     ),
                   _sectionLabel('Other'),
-                  TextFormField(
-                    controller: _taxRateController,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Tax rate (%)'),
-                    validator: (v) =>
-                        _requiredNumber(v, min: 0, label: 'Tax rate'),
-                  ),
+                  if (state.taxRates.isEmpty)
+                    const Text(
+                        'No tax rates configured. Add them in Settings → Tax Rates.')
+                  else
+                    DropdownButtonFormField<int>(
+                      key: ValueKey('template-tax-$_selectedTaxId'),
+                      initialValue: state.taxRates
+                              .any((r) => r.id == _selectedTaxId)
+                          ? _selectedTaxId
+                          : state.taxRates.first.id,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Tax rate',
+                        prefixIcon: Icon(Icons.percent_rounded),
+                      ),
+                      items: state.taxRates
+                          .where((r) => r.id != null)
+                          .map((r) => DropdownMenuItem<int>(
+                                value: r.id!,
+                                child: Text(r.label),
+                              ))
+                          .toList(),
+                      onChanged: (id) {
+                        if (id == null) return;
+                        setState(() => _selectedTaxId = id);
+                      },
+                      validator: (v) =>
+                          v == null ? 'Choose a tax rate' : null,
+                    ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _notesController,
@@ -393,7 +456,7 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
     final template = RecurringTemplate(
       clientId: _clientId!,
       items: items,
-      taxRate: double.tryParse(_taxRateController.text) ?? 0,
+      taxRate: _resolveTax(state.taxRates)?.ratePercent ?? 0,
       frequency: _frequency,
       intervalDays: _frequency == Frequency.custom
           ? int.tryParse(_intervalDaysController.text)

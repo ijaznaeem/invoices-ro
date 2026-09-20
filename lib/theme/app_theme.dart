@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class LedgerColors {
-  static const primary = Color(0xFF2563EB);
-  static const secondary = Color(0xFF10B981);
-  static const accent = Color(0xFFF59E0B);
-  static const background = Color(0xFFF8FAFC);
+  static const primary = Color(0xFFE11471);
+  static const secondary = Color(0xFF2E9B63);
+  static const accent = Color(0xFFF7A6C9);
+  static const background = Color(0xFFF4F4F4);
   static const surface = Color(0xFFFFFFFF);
-  static const textPrimary = Color(0xFF0F172A);
-  static const textSecondary = Color(0xFF64748B);
-  static const border = Color(0xFFE2E8F0);
-  static const error = Color(0xFFEF4444);
-  static const inactive = Color(0xFF94A3B8);
-  static const gradientStart = Color(0xFFEEF5FF);
+  static const textPrimary = Color(0xFF272727);
+  static const textSecondary = Color(0xFF707070);
+  static const border = Color(0xFFE8E8E8);
+  static const error = Color(0xFFD83A52);
+  static const inactive = Color(0xFFAAAAAA);
+  static const gradientStart = Color(0xFFFFF3F8);
 
   static const ink = textPrimary;
   static const inkStrong = primary;
@@ -55,9 +55,9 @@ class AppTheme {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Color(0xFF111827),
+          Color(0xFF25131C),
           LedgerColors.darkPaper,
-          Color(0xFF0B1120),
+          Color(0xFF170B11),
         ],
       ),
     );
@@ -67,15 +67,15 @@ class AppTheme {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return BoxDecoration(
       color: isDark ? LedgerColors.darkPaperRaised : LedgerColors.surface,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(12),
       border: Border.all(
         color: isDark ? LedgerColors.darkRule : LedgerColors.border,
       ),
       boxShadow: [
         BoxShadow(
           color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
-          blurRadius: 20,
-          offset: const Offset(0, 8),
+          blurRadius: 14,
+          offset: const Offset(0, 5),
         ),
       ],
     );
@@ -107,24 +107,28 @@ class AppTheme {
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
         elevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: LedgerColors.primary,
         surfaceTintColor: Colors.transparent,
-        foregroundColor: LedgerColors.textPrimary,
+        foregroundColor: Colors.white,
         centerTitle: false,
-        iconTheme: const IconThemeData(color: LedgerColors.textPrimary),
-        titleTextStyle: GoogleFonts.inter(
+        toolbarHeight: 68,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(18)),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        titleTextStyle: GoogleFonts.roboto(
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          color: LedgerColors.textPrimary,
+          color: Colors.white,
         ),
       ),
       cardTheme: CardThemeData(
         color: LedgerColors.surface,
-        elevation: 0,
-        shadowColor: Colors.black.withValues(alpha: 0.05),
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.12),
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: LedgerColors.border),
         ),
       ),
@@ -135,9 +139,9 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(28),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: GoogleFonts.roboto(
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
@@ -149,9 +153,9 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(28),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: GoogleFonts.roboto(
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
@@ -163,15 +167,15 @@ class AppTheme {
           minimumSize: const Size(double.infinity, 54),
           side: const BorderSide(color: Color(0xFFCBD5E1)),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(28),
           ),
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: LedgerColors.primary,
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.w600),
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -194,7 +198,7 @@ class AppTheme {
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
-          return GoogleFonts.inter(
+          return GoogleFonts.roboto(
             fontSize: 11,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
             color: selected ? LedgerColors.primary : LedgerColors.inactive,
@@ -208,23 +212,23 @@ class AppTheme {
             const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         hintStyle: const TextStyle(color: LedgerColors.inactive),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: LedgerColors.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: LedgerColors.primary, width: 1.4),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: LedgerColors.error),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: LedgerColors.error, width: 1.4),
         ),
       ),
@@ -232,41 +236,44 @@ class AppTheme {
         backgroundColor: LedgerColors.surface,
         selectedColor: LedgerColors.primary.withValues(alpha: 0.12),
         checkmarkColor: LedgerColors.primary,
-        labelStyle: GoogleFonts.inter(
+        labelStyle: GoogleFonts.roboto(
           color: LedgerColors.textSecondary,
           fontWeight: FontWeight.w600,
         ),
-        secondaryLabelStyle: GoogleFonts.inter(
+        secondaryLabelStyle: GoogleFonts.roboto(
           color: LedgerColors.primary,
           fontWeight: FontWeight.w700,
         ),
         side: const BorderSide(color: LedgerColors.border),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       listTileTheme: const ListTileThemeData(
         iconColor: LedgerColors.primary,
         textColor: LedgerColors.textPrimary,
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(9)),
+        ),
       ),
       dividerTheme:
           const DividerThemeData(color: LedgerColors.border, space: 1),
       dialogTheme: DialogThemeData(
         backgroundColor: LedgerColors.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: LedgerColors.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: LedgerColors.textPrimary,
-        contentTextStyle: GoogleFonts.inter(color: Colors.white),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        contentTextStyle: GoogleFonts.roboto(color: Colors.white),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -277,7 +284,7 @@ class AppTheme {
       seedColor: LedgerColors.primary,
       brightness: Brightness.dark,
     ).copyWith(
-      primary: const Color(0xFF60A5FA),
+      primary: const Color(0xFFFF6BAA),
       secondary: LedgerColors.secondary,
       tertiary: LedgerColors.accent,
       error: LedgerColors.error,
@@ -295,31 +302,48 @@ class AppTheme {
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
         elevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: LedgerColors.primary,
         surfaceTintColor: Colors.transparent,
-        foregroundColor: LedgerColors.darkInk,
+        foregroundColor: Colors.white,
         centerTitle: false,
-        iconTheme: const IconThemeData(color: LedgerColors.darkInk),
-        titleTextStyle: GoogleFonts.inter(
+        toolbarHeight: 68,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(18)),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        titleTextStyle: GoogleFonts.roboto(
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          color: LedgerColors.darkInk,
+          color: Colors.white,
         ),
       ),
       cardTheme: CardThemeData(
         color: LedgerColors.darkPaperRaised,
-        elevation: 0,
+        elevation: 2,
         shadowColor: Colors.black.withValues(alpha: 0.18),
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: LedgerColors.darkRule),
+        ),
+      ),
+      drawerTheme: const DrawerThemeData(
+        backgroundColor: LedgerColors.darkPaperRaised,
+        surfaceTintColor: Colors.transparent,
+      ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: Color(0xFFFF2D87),
+        textColor: LedgerColors.darkInk,
+        selectedColor: Color(0xFFFF70AD),
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(9)),
         ),
       ),
       inputDecorationTheme: light().inputDecorationTheme.copyWith(
             fillColor: LedgerColors.darkPaperRaised,
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: LedgerColors.darkRule),
             ),
           ),
@@ -331,26 +355,26 @@ class AppTheme {
   static TextTheme _textTheme(TextTheme base, Color ink, Color muted) {
     return base
         .copyWith(
-          headlineSmall: GoogleFonts.inter(
+          headlineSmall: GoogleFonts.roboto(
             fontSize: 24,
             fontWeight: FontWeight.w800,
             color: ink,
           ),
-          titleLarge: GoogleFonts.inter(
+          titleLarge: GoogleFonts.roboto(
             fontSize: 20,
             fontWeight: FontWeight.w700,
             color: ink,
           ),
-          titleMedium: GoogleFonts.inter(
+          titleMedium: GoogleFonts.roboto(
             fontSize: 15,
             fontWeight: FontWeight.w700,
             color: ink,
           ),
-          bodyMedium: GoogleFonts.inter(fontSize: 14, color: ink),
-          bodySmall: GoogleFonts.inter(fontSize: 12.5, color: muted),
-          labelLarge: GoogleFonts.inter(fontWeight: FontWeight.w700),
+          bodyMedium: GoogleFonts.roboto(fontSize: 14, color: ink),
+          bodySmall: GoogleFonts.roboto(fontSize: 12.5, color: muted),
+          labelLarge: GoogleFonts.roboto(fontWeight: FontWeight.w700),
         )
-        .apply(fontFamily: GoogleFonts.inter().fontFamily);
+        .apply(fontFamily: GoogleFonts.roboto().fontFamily);
   }
 
   static TextStyle mono({

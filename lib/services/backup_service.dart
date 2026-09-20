@@ -149,7 +149,7 @@ class BackupService {
       }
       final manifest = utf8.encode(jsonEncode({
         'format': 1,
-        'databaseVersion': 4,
+        'databaseVersion': 5,
         'createdAt': now.toUtc().toIso8601String(),
         'app': 'Ledger',
         'logo': logoEntry,

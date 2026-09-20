@@ -23,7 +23,8 @@ class GenerationEngine {
         guard++;
 
         if (current.endType == EndType.count &&
-            current.occurrencesGenerated >= (int.tryParse(current.endValue ?? '') ?? 0)) {
+            current.occurrencesGenerated >=
+                (int.tryParse(current.endValue ?? '') ?? 0)) {
           await db.updateTemplateStatus(current.id!, TemplateStatus.ended);
           break;
         }
@@ -34,7 +35,8 @@ class GenerationEngine {
           break;
         }
 
-        final subtotal = current.items.fold<double>(0, (s, i) => s + i.lineTotal);
+        final subtotal =
+            current.items.fold<double>(0, (s, i) => s + i.lineTotal);
         final tax = subtotal * (current.taxRate / 100);
         final total = subtotal + tax;
 
@@ -42,31 +44,71 @@ class GenerationEngine {
         final dueDate = addDays(issueDate, current.paymentTermsDays);
 
         final invoiceCount = await db.countInvoices();
-        final invoiceNumber = 'INV-${issueDate.substring(0, 4)}-${(invoiceCount + 1).toString().padLeft(4, '0')}';
+        final invoiceNumber =
+            'INV-${issueDate.substring(0, 4)}-${(invoiceCount + 1).toString().padLeft(4, '0')}';
+        final client = await db.getClient(current.clientId);
 
-        await db.insertInvoice(InvoiceRecord(
+        final saved = await db.insertInvoice(InvoiceRecord(
           templateId: current.id,
           invoiceNumber: invoiceNumber,
           clientId: current.clientId,
+          clientName: client?.name,
+          clientEmail: client?.email,
+          clientPhone: client?.phone,
+          clientAddress: client?.address,
           items: current.items,
           subtotal: subtotal,
           tax: tax,
+          taxRatePercent: current.taxRate,
           total: total,
           issueDate: issueDate,
           dueDate: dueDate,
           status: InvoiceStatus.pending,
         ));
 
-        final client = await db.getClient(current.clientId);
-        await db.insertNotification('Generated $invoiceNumber for ${client?.name ?? 'client'} — due $dueDate');
+        final ledger = <LedgerEntry>[
+          LedgerEntry(
+            entryDate: issueDate,
+            account: 'Accounts Receivable',
+            description: 'Invoice $invoiceNumber',
+            debit: total,
+            refType: 'invoice',
+            refId: saved.id,
+          ),
+          LedgerEntry(
+            entryDate: issueDate,
+            account: 'Sales Revenue',
+            description: 'Invoice $invoiceNumber — subtotal',
+            credit: subtotal,
+            refType: 'invoice',
+            refId: saved.id,
+          ),
+        ];
+        if (tax > 0) {
+          ledger.add(LedgerEntry(
+            entryDate: issueDate,
+            account: 'Tax Payable',
+            description: 'Invoice $invoiceNumber — tax',
+            credit: tax,
+            refType: 'invoice',
+            refId: saved.id,
+          ));
+        }
+        await db.insertLedgerEntries(ledger);
+
+        await db.insertNotification(
+            'Generated $invoiceNumber for ${client?.name ?? 'client'} — due $dueDate');
 
         generatedCount++;
 
         final newOccurrences = current.occurrencesGenerated + 1;
-        final newNextDue = advanceDate(current.nextDueDate, current.frequency, current.intervalDays);
-        await db.updateTemplateProgress(current.id!, newNextDue, newOccurrences);
+        final newNextDue = advanceDate(
+            current.nextDueDate, current.frequency, current.intervalDays);
+        await db.updateTemplateProgress(
+            current.id!, newNextDue, newOccurrences);
 
-        current = current.copyWith(nextDueDate: newNextDue, occurrencesGenerated: newOccurrences);
+        current = current.copyWith(
+            nextDueDate: newNextDue, occurrencesGenerated: newOccurrences);
       }
     }
 
