@@ -22,7 +22,8 @@ class ClientsScreen extends StatelessWidget {
                 children: const [
                   EmptyState(
                     title: 'No clients yet',
-                    subtitle: 'Add a client to start billing them.',
+                    subtitle:
+                        'Add a client for faster billing, or invoice walk-ins without saving them.',
                     icon: Icons.people_outline,
                   ),
                 ],

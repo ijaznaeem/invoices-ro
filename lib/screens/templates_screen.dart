@@ -17,7 +17,7 @@ class TemplatesScreen extends StatelessWidget {
     final state = AppStateScope.of(context);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      appBar: AppBar(title: const Text('Recurring invoices')),
       body: RefreshIndicator(
         onRefresh: () => state.reloadTemplates(),
         child: state.templates.isEmpty
@@ -26,7 +26,8 @@ class TemplatesScreen extends StatelessWidget {
                 children: const [
                   EmptyState(
                     title: 'No recurring invoices yet',
-                    subtitle: 'Tap the + button to set one up.',
+                    subtitle:
+                        'Tap + to set one up. A saved client is optional.',
                     icon: Icons.autorenew,
                   ),
                 ],
@@ -43,7 +44,7 @@ class TemplatesScreen extends StatelessWidget {
                           : LedgerTick.neutral;
                   return LedgerRow(
                     tick: tick,
-                    title: t.clientName ?? 'Client',
+                    title: t.displayName,
                     subtitle:
                         '${frequencyLabel(t.frequency)} · next due ${formatDate(t.nextDueDate)} · ${t.occurrencesGenerated} generated',
                     trailingFigure: money(t.total),
@@ -72,7 +73,7 @@ class TemplatesScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: Text(t.clientName ?? 'Client',
+              title: Text(t.displayName,
                   style: Theme.of(context).textTheme.titleLarge),
               subtitle: Text(
                   '${frequencyLabel(t.frequency)} · next due ${formatDate(t.nextDueDate)}'),

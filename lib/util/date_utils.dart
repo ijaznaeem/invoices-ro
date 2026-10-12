@@ -5,6 +5,17 @@ final DateFormat _isoDate = DateFormat('yyyy-MM-dd');
 
 String todayStr() => _isoDate.format(DateTime.now());
 
+/// `yyyy-MM` key used for monthly cash/expense grouping.
+String monthKey([DateTime? date]) {
+  final d = date ?? DateTime.now();
+  return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}';
+}
+
+String monthTitle(DateTime month) => DateFormat('MMMM yyyy').format(month);
+
+bool inMonth(String isoDate, String key) =>
+    isoDate.length >= 7 && isoDate.substring(0, 7) == key;
+
 String formatDate(String isoDate) {
   try {
     return DateFormat('MMM d, yyyy').format(_isoDate.parse(isoDate));
@@ -45,6 +56,9 @@ DateTime _addMonths(DateTime d, int months) {
   return DateTime(year, month, day);
 }
 
+String invoiceTypeLabel(InvoiceRecord invoice) =>
+    invoice.templateId != null ? 'Scheduled' : 'One-off';
+
 String frequencyLabel(Frequency f) {
   switch (f) {
     case Frequency.weekly:
@@ -58,4 +72,21 @@ String frequencyLabel(Frequency f) {
     case Frequency.custom:
       return 'Custom';
   }
+}
+
+/// Shared end-condition checks used by invoice and expense generation.
+bool recurrenceHasEnded({
+  required EndType endType,
+  required String? endValue,
+  required int occurrencesGenerated,
+  required String nextDueDate,
+}) {
+  if (endType == EndType.count) {
+    final limit = int.tryParse(endValue ?? '') ?? 0;
+    return occurrencesGenerated >= limit;
+  }
+  if (endType == EndType.date && endValue != null) {
+    return nextDueDate.compareTo(endValue) > 0;
+  }
+  return false;
 }

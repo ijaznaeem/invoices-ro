@@ -185,27 +185,25 @@ class BackupService {
     final target = await FilePicker.saveFile(
       dialogTitle: 'Export Ledger backup',
       fileName: p.basename(backup.path),
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
+      mimeType: 'application/zip',
       bytes: await backup.readAsBytes(),
     );
     if (target == null) return;
   }
 
   Future<File?> pickBackup() async {
-    final result = await FilePicker.pickFiles(
+    final files = await FilePicker.pickFiles(
       dialogTitle: 'Select a Ledger backup',
       type: FileType.custom,
       allowedExtensions: ['zip'],
-      withData: true,
     );
-    final picked = result?.files.single;
-    if (picked == null) return null;
+    if (files.isEmpty) return null;
+    final picked = files.first;
     if (picked.path != null) return File(picked.path!);
-    if (picked.bytes == null) return null;
+    final bytes = await picked.readAsBytes();
     final file = File(
         p.join((await Directory.systemTemp.createTemp()).path, picked.name));
-    return file..writeAsBytesSync(picked.bytes!);
+    return file..writeAsBytesSync(bytes);
   }
 
   Future<void> restoreBackup(File backup) async {

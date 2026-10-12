@@ -56,12 +56,13 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
   bool _saving = false;
   bool _taxReady = false;
 
-  InvoiceRecord? get _existing => widget.invoice;
+  InvoiceRecord? get _source => widget.invoice;
+  bool get _isEditing => widget.invoice?.id != null;
 
   @override
   void initState() {
     super.initState();
-    final inv = _existing;
+    final inv = _source;
     _clientId = inv?.clientId;
     _saveAsClient = false;
     _issueDate = DateTime.tryParse(inv?.issueDate ?? '') ?? DateTime.now();
@@ -86,7 +87,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
     if (!mounted) return;
     final rates = state.taxRates;
     TaxRate? match;
-    final inv = _existing;
+    final inv = _source;
     if (inv != null && rates.isNotEmpty) {
       match = rates
           .where((r) => (r.ratePercent - inv.taxRatePercent).abs() < 0.0001)
@@ -131,8 +132,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
       _resolveTax(rates)?.ratePercent ?? 0;
   double _taxAmountFor(List<TaxRate> rates) =>
       _subtotal * (_taxRateFor(rates) / 100);
-  double _totalFor(List<TaxRate> rates) =>
-      _subtotal + _taxAmountFor(rates);
+  double _totalFor(List<TaxRate> rates) => _subtotal + _taxAmountFor(rates);
 
   String? _requiredNumber(String? value,
       {required double min, required String label}) {
@@ -194,10 +194,11 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
         invoiceClientId = saved.id;
       }
       final record = InvoiceRecord(
-        id: _existing?.id,
-        templateId: _existing?.templateId,
-        invoiceNumber: _existing?.invoiceNumber ??
-            await state.nextInvoiceNumber(issueDateString),
+        id: _isEditing ? _source!.id : null,
+        templateId: _isEditing ? _source!.templateId : null,
+        invoiceNumber: _isEditing
+            ? _source!.invoiceNumber
+            : await state.nextInvoiceNumber(issueDateString),
         clientId: invoiceClientId,
         clientName: _nameController.text.trim(),
         clientEmail: _emailController.text.trim(),
@@ -208,16 +209,16 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
         tax: tax,
         taxRatePercent: taxRate,
         total: invoiceSubtotal + tax,
-        amountPaid: _existing?.amountPaid ?? 0,
+        amountPaid: _isEditing ? _source!.amountPaid : 0,
         issueDate: issueDateString,
         dueDate: _dueDate.toIso8601String().substring(0, 10),
-        status: _existing?.status ?? InvoiceStatus.pending,
-        paidDate: _existing?.paidDate,
+        status: _isEditing ? _source!.status : InvoiceStatus.pending,
+        paidDate: _isEditing ? _source!.paidDate : null,
       );
-      if (_existing == null) {
-        await state.addInvoice(record);
-      } else {
+      if (_isEditing) {
         await state.updateInvoice(record);
+      } else {
+        await state.addInvoice(record);
       }
       if (mounted) Navigator.pop(context);
     } finally {
@@ -232,9 +233,8 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_existing == null
-            ? 'New invoice'
-            : 'Edit ${_existing!.invoiceNumber}'),
+        title:
+            Text(_isEditing ? 'Edit ${_source!.invoiceNumber}' : 'New invoice'),
       ),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
@@ -248,6 +248,11 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   children: [
                     _sectionLabel('CLIENT'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Pick a saved client or enter details for a walk-in. Saving the contact is optional.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                     const SizedBox(height: 8),
                     SearchableDropdown<int>(
                       label: 'Saved client (optional)',
@@ -258,26 +263,22 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
                       allowClear: true,
                       clearLabel: 'Walk-in / new client',
                       emptyMessage: 'No clients match your search',
-                      items: state.clients
-                          .where((c) => c.id != null)
-                          .map((c) {
-                            final details = [
-                              if (c.email?.trim().isNotEmpty == true) c.email!,
-                              if (c.phone?.trim().isNotEmpty == true) c.phone!,
-                            ].join(' · ');
-                            return SearchableOption<int>(
-                              value: c.id!,
-                              label: c.name,
-                              subtitle: details.isEmpty ? null : details,
-                              searchText:
-                                  '${c.name} ${c.email ?? ''} ${c.phone ?? ''} ${c.address ?? ''}',
-                            );
-                          })
-                          .toList(),
+                      items: state.clients.where((c) => c.id != null).map((c) {
+                        final details = [
+                          if (c.email?.trim().isNotEmpty == true) c.email!,
+                          if (c.phone?.trim().isNotEmpty == true) c.phone!,
+                        ].join(' · ');
+                        return SearchableOption<int>(
+                          value: c.id!,
+                          label: c.name,
+                          subtitle: details.isEmpty ? null : details,
+                          searchText:
+                              '${c.name} ${c.email ?? ''} ${c.phone ?? ''} ${c.address ?? ''}',
+                        );
+                      }).toList(),
                       onChanged: (id) {
-                        final selected = state.clients
-                            .where((c) => c.id == id)
-                            .firstOrNull;
+                        final selected =
+                            state.clients.where((c) => c.id == id).firstOrNull;
                         setState(() {
                           _clientId = id;
                           _saveAsClient = false;
@@ -343,8 +344,9 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
                             child: InputDecorator(
                               decoration: const InputDecoration(
                                   labelText: 'Issue date'),
-                              child: Text(formatDate(
-                                  _issueDate.toIso8601String().substring(0, 10))),
+                              child: Text(formatDate(_issueDate
+                                  .toIso8601String()
+                                  .substring(0, 10))),
                             ),
                           ),
                         ),
@@ -526,9 +528,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Text(_existing == null
-                            ? 'Create invoice'
-                            : 'Save changes'),
+                        : Text(_isEditing ? 'Save changes' : 'Create invoice'),
                   ),
                 ),
               ),
