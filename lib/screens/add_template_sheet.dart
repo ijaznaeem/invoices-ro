@@ -20,13 +20,18 @@ class _ItemDraft {
 }
 
 Future<void> showAddTemplateSheet(BuildContext context) async {
+  final state = AppStateScope.of(context);
+  if (state.clients.isEmpty) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Add a client first.')));
+    return;
+  }
   await showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Theme.of(context).scaffoldBackgroundColor,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
     builder: (_) => const _AddTemplateSheet(),
   );
 }
@@ -41,11 +46,6 @@ class _AddTemplateSheet extends StatefulWidget {
 class _AddTemplateSheetState extends State<_AddTemplateSheet> {
   final _formKey = GlobalKey<FormState>();
   int? _clientId;
-  bool _saveAsClient = false;
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
   final List<_ItemDraft> _items = [_ItemDraft()];
   Frequency _frequency = Frequency.monthly;
   final _intervalDaysController = TextEditingController(text: '30');
@@ -77,8 +77,7 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
     }
     if (!mounted) return;
     setState(() {
-      _selectedTaxId =
-          state.defaultTaxRate.id ?? state.taxRates.firstOrNull?.id;
+      _selectedTaxId = state.defaultTaxRate.id ?? state.taxRates.firstOrNull?.id;
     });
   }
 
@@ -100,10 +99,6 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
     _paymentTermsController.dispose();
     _endValueController.dispose();
     _notesController.dispose();
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
     super.dispose();
   }
 
@@ -124,15 +119,11 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'New recurring invoice',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
+                      child: Text('New recurring invoice',
+                          style: Theme.of(context).textTheme.titleLarge)),
                   IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                  ),
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close)),
                 ],
               ),
             ),
@@ -143,87 +134,36 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 children: [
                   SearchableDropdown<int>(
-                    label: 'Saved client (optional)',
-                    hint: 'Walk-in / new client',
+                    label: 'Client',
+                    hint: 'Select a client',
                     searchHint: 'Search clients…',
                     prefixIcon: Icons.person_search_rounded,
                     value: _clientId,
-                    allowClear: true,
-                    clearLabel: 'Walk-in / new client',
                     emptyMessage: 'No clients match your search',
-                    items: state.clients.where((c) => c.id != null).map((c) {
-                      final details = [
-                        if (c.email?.trim().isNotEmpty == true) c.email!,
-                        if (c.phone?.trim().isNotEmpty == true) c.phone!,
-                      ].join(' · ');
-                      return SearchableOption<int>(
-                        value: c.id!,
-                        label: c.name,
-                        subtitle: details.isEmpty ? null : details,
-                        searchText:
-                            '${c.name} ${c.email ?? ''} ${c.phone ?? ''}',
-                      );
-                    }).toList(),
-                    onChanged: (id) {
-                      final selected =
-                          state.clients.where((c) => c.id == id).firstOrNull;
-                      setState(() {
-                        _clientId = id;
-                        _saveAsClient = false;
-                        if (selected != null) {
-                          _nameController.text = selected.name;
-                          _emailController.text = selected.email ?? '';
-                          _phoneController.text = selected.phone ?? '';
-                          _addressController.text = selected.address ?? '';
-                        }
-                      });
-                    },
-                  ),
-                  if (_clientId == null)
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _saveAsClient,
-                      onChanged: (value) =>
-                          setState(() => _saveAsClient = value ?? false),
-                      title: const Text('Save client for future invoices'),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'Client name'),
-                    validator: (v) => (v?.trim().isEmpty ?? true)
-                        ? 'Enter a client name'
-                        : null,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Email (optional)',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone (optional)',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _addressController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Address (optional)',
-                    ),
+                    items: state.clients
+                        .where((c) => c.id != null)
+                        .map((c) {
+                          final details = [
+                            if (c.email?.trim().isNotEmpty == true) c.email!,
+                            if (c.phone?.trim().isNotEmpty == true) c.phone!,
+                          ].join(' · ');
+                          return SearchableOption<int>(
+                            value: c.id!,
+                            label: c.name,
+                            subtitle: details.isEmpty ? null : details,
+                            searchText:
+                                '${c.name} ${c.email ?? ''} ${c.phone ?? ''}',
+                          );
+                        })
+                        .toList(),
+                    onChanged: (id) => setState(() => _clientId = id),
+                    validator: (v) => v == null ? 'Choose a client' : null,
                   ),
                   _sectionLabel('Line items'),
-                  ..._items.asMap().entries.map(
-                        (entry) => _itemRow(entry.key, entry.value),
-                      ),
+                  ..._items
+                      .asMap()
+                      .entries
+                      .map((entry) => _itemRow(entry.key, entry.value)),
                   TextButton.icon(
                     onPressed: () => setState(() => _items.add(_ItemDraft())),
                     icon: const Icon(Icons.add, size: 18),
@@ -231,10 +171,8 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                   ),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Text(
-                      'Subtotal ${money(_subtotal)}',
-                      style: AppTheme.mono(size: 15),
-                    ),
+                    child: Text('Subtotal ${money(_subtotal)}',
+                        style: AppTheme.mono(size: 15)),
                   ),
                   _sectionLabel('Schedule'),
                   Row(
@@ -242,20 +180,14 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                       Expanded(
                         child: DropdownButtonFormField<Frequency>(
                           initialValue: _frequency,
-                          decoration: const InputDecoration(
-                            labelText: 'Frequency',
-                          ),
+                          decoration:
+                              const InputDecoration(labelText: 'Frequency'),
                           items: Frequency.values
-                              .map(
-                                (f) => DropdownMenuItem(
-                                  value: f,
-                                  child: Text(frequencyLabel(f)),
-                                ),
-                              )
+                              .map((f) => DropdownMenuItem(
+                                  value: f, child: Text(frequencyLabel(f))))
                               .toList(),
                           onChanged: (v) => setState(
-                            () => _frequency = v ?? Frequency.monthly,
-                          ),
+                              () => _frequency = v ?? Frequency.monthly),
                         ),
                       ),
                       if (_frequency == Frequency.custom) ...[
@@ -265,8 +197,7 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                             controller: _intervalDaysController,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
-                              labelText: 'Every N days',
-                            ),
+                                labelText: 'Every N days'),
                             validator: (v) =>
                                 _requiredInt(v, min: 1, label: 'Days'),
                           ),
@@ -282,13 +213,9 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                           onTap: _pickStartDate,
                           child: InputDecorator(
                             decoration: const InputDecoration(
-                              labelText: 'First invoice date',
-                            ),
-                            child: Text(
-                              formatDate(
-                                _startDate.toIso8601String().substring(0, 10),
-                              ),
-                            ),
+                                labelText: 'First invoice date'),
+                            child: Text(formatDate(
+                                _startDate.toIso8601String().substring(0, 10))),
                           ),
                         ),
                       ),
@@ -298,8 +225,7 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                           controller: _paymentTermsController,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
-                            labelText: 'Payment terms (days)',
-                          ),
+                              labelText: 'Payment terms (days)'),
                           validator: (v) =>
                               _requiredInt(v, min: 0, label: 'Payment terms'),
                         ),
@@ -312,17 +238,13 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                     decoration: const InputDecoration(labelText: 'Ends'),
                     items: const [
                       DropdownMenuItem(
-                        value: EndType.never,
-                        child: Text('Never'),
-                      ),
+                          value: EndType.never, child: Text('Never')),
                       DropdownMenuItem(
-                        value: EndType.count,
-                        child: Text('After a number of invoices'),
-                      ),
+                          value: EndType.count,
+                          child: Text('After a number of invoices')),
                       DropdownMenuItem(
-                        value: EndType.date,
-                        child: Text('On a specific date'),
-                      ),
+                          value: EndType.date,
+                          child: Text('On a specific date')),
                     ],
                     onChanged: (v) =>
                         setState(() => _endType = v ?? EndType.never),
@@ -334,8 +256,7 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                         controller: _endValueController,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'Number of invoices',
-                        ),
+                            labelText: 'Number of invoices'),
                         validator: (v) => _endType == EndType.count
                             ? _requiredInt(v, min: 1, label: 'Invoices')
                             : null,
@@ -347,34 +268,27 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                       child: InkWell(
                         onTap: _pickEndDate,
                         child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'End date',
-                          ),
-                          child: Text(
-                            _endDate == null
-                                ? 'Choose a date'
-                                : formatDate(
-                                    _endDate!.toIso8601String().substring(
-                                          0,
-                                          10,
-                                        ),
-                                  ),
-                          ),
+                          decoration:
+                              const InputDecoration(labelText: 'End date'),
+                          child: Text(_endDate == null
+                              ? 'Choose a date'
+                              : formatDate(_endDate!
+                                  .toIso8601String()
+                                  .substring(0, 10))),
                         ),
                       ),
                     ),
                   _sectionLabel('Other'),
                   if (state.taxRates.isEmpty)
                     const Text(
-                      'No tax rates configured. Add them in Settings → Tax Rates.',
-                    )
+                        'No tax rates configured. Add them in Settings → Tax Rates.')
                   else
                     DropdownButtonFormField<int>(
                       key: ValueKey('template-tax-$_selectedTaxId'),
-                      initialValue:
-                          state.taxRates.any((r) => r.id == _selectedTaxId)
-                              ? _selectedTaxId
-                              : state.taxRates.first.id,
+                      initialValue: state.taxRates
+                              .any((r) => r.id == _selectedTaxId)
+                          ? _selectedTaxId
+                          : state.taxRates.first.id,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Tax rate',
@@ -382,26 +296,24 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                       ),
                       items: state.taxRates
                           .where((r) => r.id != null)
-                          .map(
-                            (r) => DropdownMenuItem<int>(
-                              value: r.id!,
-                              child: Text(r.label),
-                            ),
-                          )
+                          .map((r) => DropdownMenuItem<int>(
+                                value: r.id!,
+                                child: Text(r.label),
+                              ))
                           .toList(),
                       onChanged: (id) {
                         if (id == null) return;
                         setState(() => _selectedTaxId = id);
                       },
-                      validator: (v) => v == null ? 'Choose a tax rate' : null,
+                      validator: (v) =>
+                          v == null ? 'Choose a tax rate' : null,
                     ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _notesController,
                     maxLines: 2,
                     decoration: const InputDecoration(
-                      labelText: 'Notes (shown on the invoice)',
-                    ),
+                        labelText: 'Notes (shown on the invoice)'),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -418,8 +330,7 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
                       ? const SizedBox(
                           height: 18,
                           width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                          child: CircularProgressIndicator(strokeWidth: 2))
                       : const Text('Create recurring invoice'),
                 ),
               ),
@@ -432,13 +343,11 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
 
   Widget _sectionLabel(String text) => Padding(
         padding: const EdgeInsets.only(top: 18, bottom: 8),
-        child: Text(
-          text.toUpperCase(),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                letterSpacing: 0.6,
-                fontWeight: FontWeight.w600,
-              ),
-        ),
+        child: Text(text.toUpperCase(),
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(letterSpacing: 0.6, fontWeight: FontWeight.w600)),
       );
 
   Widget _itemRow(int index, _ItemDraft item) {
@@ -451,13 +360,10 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
             child: TextFormField(
               controller: item.descriptionController,
               decoration: const InputDecoration(
-                labelText: 'Description',
-                isDense: true,
-              ),
+                  labelText: 'Description', isDense: true),
               validator: (v) {
-                final hasAnyItemText = _items.any(
-                  (i) => i.descriptionController.text.trim().isNotEmpty,
-                );
+                final hasAnyItemText = _items
+                    .any((i) => i.descriptionController.text.trim().isNotEmpty);
                 if (!hasAnyItemText && index == 0) return 'Required';
                 return null;
               },
@@ -469,10 +375,8 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
             child: TextFormField(
               controller: item.quantityController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Qty',
-                isDense: true,
-              ),
+              decoration:
+                  const InputDecoration(labelText: 'Qty', isDense: true),
               validator: (v) => item.descriptionController.text.trim().isEmpty
                   ? null
                   : _requiredNumber(v, min: 0.01, label: 'Qty'),
@@ -484,10 +388,8 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
             child: TextFormField(
               controller: item.priceController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Price',
-                isDense: true,
-              ),
+              decoration:
+                  const InputDecoration(labelText: 'Price', isDense: true),
               validator: (v) => item.descriptionController.text.trim().isEmpty
                   ? null
                   : _requiredNumber(v, min: 0, label: 'Price'),
@@ -529,25 +431,21 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final items = _items
         .where((i) => i.descriptionController.text.trim().isNotEmpty)
-        .map(
-          (i) => InvoiceItem(
-            description: i.descriptionController.text.trim(),
-            quantity: double.tryParse(i.quantityController.text) ?? 0,
-            unitPrice: double.tryParse(i.priceController.text) ?? 0,
-          ),
-        )
+        .map((i) => InvoiceItem(
+              description: i.descriptionController.text.trim(),
+              quantity: double.tryParse(i.quantityController.text) ?? 0,
+              unitPrice: double.tryParse(i.priceController.text) ?? 0,
+            ))
         .toList();
 
     if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one line item.')),
-      );
+          const SnackBar(content: Text('Add at least one line item.')));
       return;
     }
     if (_endType == EndType.date && _endDate == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Choose an end date.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Choose an end date.')));
       return;
     }
 
@@ -555,25 +453,8 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
     final startDateStr = _startDate.toIso8601String().substring(0, 10);
     final state = AppStateScope.of(context);
 
-    var invoiceClientId = _clientId;
-    if (invoiceClientId == null && _saveAsClient) {
-      final saved = await state.addClient(
-        Client(
-          name: _nameController.text.trim(),
-          email: _emailController.text.trim(),
-          phone: _phoneController.text.trim(),
-          address: _addressController.text.trim(),
-        ),
-      );
-      invoiceClientId = saved.id;
-    }
-
     final template = RecurringTemplate(
-      clientId: invoiceClientId,
-      clientName: _nameController.text.trim(),
-      clientEmail: _emailController.text.trim(),
-      clientPhone: _phoneController.text.trim(),
-      clientAddress: _addressController.text.trim(),
+      clientId: _clientId!,
       items: items,
       taxRate: _resolveTax(state.taxRates)?.ratePercent ?? 0,
       frequency: _frequency,
@@ -602,22 +483,16 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
     if (mounted) Navigator.pop(context);
   }
 
-  String? _requiredInt(
-    String? value, {
-    required int min,
-    required String label,
-  }) {
+  String? _requiredInt(String? value,
+      {required int min, required String label}) {
     final parsed = int.tryParse(value?.trim() ?? '');
     if (parsed == null) return 'Enter a valid number';
     if (parsed < min) return '$label must be at least $min';
     return null;
   }
 
-  String? _requiredNumber(
-    String? value, {
-    required double min,
-    required String label,
-  }) {
+  String? _requiredNumber(String? value,
+      {required double min, required String label}) {
     final parsed = double.tryParse(value?.trim() ?? '');
     if (parsed == null) return 'Enter a valid number';
     if (parsed < min) return '$label must be at least $min';

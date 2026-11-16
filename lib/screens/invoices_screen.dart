@@ -7,65 +7,29 @@ import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
 import '../widgets/ledger_row.dart';
 import '../widgets/status_pill.dart';
-import 'add_template_sheet.dart';
 import 'invoice_edit_screen.dart';
 import 'invoice_pdf_preview_screen.dart';
-import 'templates_screen.dart';
 
-const _filters = ['All', 'Pending', 'Paid', 'Cancelled'];
+const _filters = ['All', 'Pending', 'Partial', 'Overdue', 'Paid', 'Cancelled'];
 
-class InvoicesScreen extends StatefulWidget {
+class InvoicesScreen extends StatelessWidget {
   const InvoicesScreen({super.key});
-
-  @override
-  State<InvoicesScreen> createState() => _InvoicesScreenState();
-}
-
-class _InvoicesScreenState extends State<InvoicesScreen> {
-  final _searchController = TextEditingController();
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  List<InvoiceRecord> _visible(AppState state) {
-    final q = _searchController.text.trim().toLowerCase();
-    if (q.isEmpty) return state.invoices;
-    return state.invoices.where((inv) {
-      final name = inv.clientName?.toLowerCase() ?? '';
-      return inv.invoiceNumber.toLowerCase().contains(q) || name.contains(q);
-    }).toList();
-  }
 
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final invoices = _visible(state);
 
     return Stack(
       children: [
         Column(children: [
           SizedBox(
-            height: 48,
+            height: 44,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              itemCount: _filters.length + 1,
+              itemCount: _filters.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, i) {
-                if (i == _filters.length) {
-                  return ActionChip(
-                    avatar: const Icon(Icons.autorenew, size: 16),
-                    label: const Text('Schedules'),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const TemplatesScreen()),
-                    ),
-                  );
-                }
                 final f = _filters[i];
                 final selected = state.invoiceFilter == f;
                 return ChoiceChip(
@@ -76,22 +40,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                hintText: 'Search number or client',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
-              ),
-            ),
-          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => state.reloadInvoices(),
-              child: invoices.isEmpty
+              child: state.invoices.isEmpty
                   ? ListView(
                       padding: const EdgeInsets.symmetric(vertical: 60),
                       children: const [
@@ -105,9 +57,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.only(bottom: 88, top: 4),
-                      itemCount: invoices.length,
+                      itemCount: state.invoices.length,
                       itemBuilder: (context, index) {
-                        final inv = invoices[index];
+                        final inv = state.invoices[index];
                         final display = inv.displayStatus(todayStr());
                         final tick = display == 'Paid'
                             ? LedgerTick.paid
@@ -143,56 +95,15 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           bottom: 16,
           child: FloatingActionButton.extended(
             heroTag: 'invoices_fab',
-            onPressed: () => _showNewInvoiceChooser(context),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const InvoiceEditScreen()),
+            ),
             icon: const Icon(Icons.add),
             label: const Text('New invoice'),
           ),
         ),
       ],
-    );
-  }
-
-  void _showNewInvoiceChooser(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(
-                'New invoice',
-                style: Theme.of(sheetContext).textTheme.titleLarge,
-              ),
-              subtitle: const Text('Choose one-off or a repeating schedule'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.receipt_long_outlined),
-              title: const Text('Simple invoice'),
-              subtitle: const Text('Create one invoice now'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const InvoiceEditScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.autorenew_rounded),
-              title: const Text('Scheduled invoice'),
-              subtitle: const Text('Repeat weekly, monthly, or on a custom cycle'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                showAddTemplateSheet(context);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
     );
   }
 
@@ -226,41 +137,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 );
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.copy_outlined),
-              title: const Text('Duplicate'),
-              subtitle: const Text('New invoice with the same lines'),
-              onTap: () {
-                Navigator.pop(context);
-                final today = todayStr();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => InvoiceEditScreen(
-                      invoice: InvoiceRecord(
-                        invoiceNumber: '',
-                        clientId: inv.clientId,
-                        clientName: inv.clientName,
-                        clientEmail: inv.clientEmail,
-                        clientPhone: inv.clientPhone,
-                        clientAddress: inv.clientAddress,
-                        items: inv.items,
-                        subtotal: inv.subtotal,
-                        tax: inv.tax,
-                        taxRatePercent: inv.taxRatePercent,
-                        total: inv.total,
-                        issueDate: today,
-                        dueDate: addDays(today, 14),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
             if (inv.isOpen)
               ListTile(
-                leading:
-                    const Icon(Icons.payments_outlined, color: Colors.teal),
+                leading: const Icon(Icons.payments_outlined,
+                    color: Colors.teal),
                 title: const Text('Record payment'),
                 subtitle: Text('Balance due ${money(inv.balanceDue)}'),
                 onTap: () {
@@ -373,7 +253,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     initialValue: method,
                     decoration: const InputDecoration(labelText: 'Method'),
                     items: methods
-                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                        .map((m) =>
+                            DropdownMenuItem(value: m, child: Text(m)))
                         .toList(),
                     onChanged: (v) {
                       if (v != null) setSheetState(() => method = v);
@@ -431,8 +312,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                              content:
-                                  Text('Recorded payment of ${money(amount)}')),
+                              content: Text(
+                                  'Recorded payment of ${money(amount)}')),
                         );
                       }
                     },

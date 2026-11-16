@@ -28,11 +28,10 @@ class DatabaseHelper {
     final path = await databasePath;
     return openDatabase(
       path,
-      version: 7,
+      version: 6,
       onCreate: (db, version) async {
         await _createV5Core(db);
         await _createV6Tables(db);
-        await _createV7Tables(db);
         await _seedV6Defaults(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -139,11 +138,6 @@ class DatabaseHelper {
           await _createV6Tables(db);
           await _seedV6Defaults(db);
         }
-        if (oldVersion < 7) {
-          await _createV7Tables(db);
-          await _addColumnIfMissing(db, 'expenses', 'template_id', 'INTEGER');
-          await _migrateTemplatesToV7(db);
-        }
       },
     );
   }
@@ -158,7 +152,24 @@ class DatabaseHelper {
         address TEXT
       )
     ''');
-    await _createTemplatesTable(db);
+    await db.execute('''
+      CREATE TABLE templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL REFERENCES clients(id),
+        items_json TEXT NOT NULL,
+        tax_rate REAL NOT NULL DEFAULT 0,
+        frequency TEXT NOT NULL,
+        interval_days INTEGER,
+        start_date TEXT NOT NULL,
+        next_due_date TEXT NOT NULL,
+        payment_terms_days INTEGER NOT NULL DEFAULT 14,
+        end_type TEXT NOT NULL DEFAULT 'never',
+        end_value TEXT,
+        occurrences_generated INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        notes TEXT
+      )
+    ''');
     await db.execute('''
       CREATE TABLE invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -248,7 +259,6 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        template_id INTEGER,
         head_id INTEGER NOT NULL REFERENCES expense_heads(id),
         amount REAL NOT NULL,
         expense_date TEXT NOT NULL,
@@ -279,81 +289,10 @@ class DatabaseHelper {
     ''');
   }
 
-  Future<void> _createTemplatesTable(
-    DatabaseExecutor db, {
-    String name = 'templates',
-  }) async {
-    await db.execute('''
-      CREATE TABLE $name (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER REFERENCES clients(id),
-        client_name TEXT NOT NULL DEFAULT '',
-        client_email TEXT,
-        client_phone TEXT,
-        client_address TEXT,
-        items_json TEXT NOT NULL,
-        tax_rate REAL NOT NULL DEFAULT 0,
-        frequency TEXT NOT NULL,
-        interval_days INTEGER,
-        start_date TEXT NOT NULL,
-        next_due_date TEXT NOT NULL,
-        payment_terms_days INTEGER NOT NULL DEFAULT 14,
-        end_type TEXT NOT NULL DEFAULT 'never',
-        end_value TEXT,
-        occurrences_generated INTEGER NOT NULL DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'active',
-        notes TEXT
-      )
-    ''');
-  }
-
-  Future<void> _createV7Tables(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS recurring_expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        head_id INTEGER NOT NULL REFERENCES expense_heads(id),
-        amount REAL NOT NULL,
-        notes TEXT,
-        frequency TEXT NOT NULL,
-        interval_days INTEGER,
-        start_date TEXT NOT NULL,
-        next_due_date TEXT NOT NULL,
-        end_type TEXT NOT NULL DEFAULT 'never',
-        end_value TEXT,
-        occurrences_generated INTEGER NOT NULL DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'active'
-      )
-    ''');
-  }
-
-  /// Makes invoice templates optional-client and stores a contact snapshot.
-  Future<void> _migrateTemplatesToV7(Database db) async {
-    await db.execute('PRAGMA foreign_keys = OFF');
-    await _createTemplatesTable(db, name: 'templates_v7');
-    await db.execute('''
-      INSERT INTO templates_v7 (
-        id, client_id, client_name, client_email, client_phone, client_address,
-        items_json, tax_rate, frequency, interval_days, start_date,
-        next_due_date, payment_terms_days, end_type, end_value,
-        occurrences_generated, status, notes
-      )
-      SELECT t.id, t.client_id, COALESCE(c.name, ''), c.email, c.phone, c.address,
-        t.items_json, t.tax_rate, t.frequency, t.interval_days, t.start_date,
-        t.next_due_date, t.payment_terms_days, t.end_type, t.end_value,
-        t.occurrences_generated, t.status, t.notes
-      FROM templates t
-      LEFT JOIN clients c ON c.id = t.client_id
-    ''');
-    await db.execute('DROP TABLE templates');
-    await db.execute('ALTER TABLE templates_v7 RENAME TO templates');
-    await db.execute('PRAGMA foreign_keys = ON');
-  }
-
   Future<void> _seedV6Defaults(Database db) async {
-    final taxCount = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM tax_rates'),
-        ) ??
-        0;
+    final taxCount =
+        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tax_rates')) ??
+            0;
     if (taxCount == 0) {
       await db.insert('tax_rates', {
         'name': 'No Tax',
@@ -378,8 +317,7 @@ class DatabaseHelper {
     }
 
     final headCount = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM expense_heads'),
-        ) ??
+            await db.rawQuery('SELECT COUNT(*) FROM expense_heads')) ??
         0;
     if (headCount == 0) {
       const heads = [
@@ -391,7 +329,10 @@ class DatabaseHelper {
         'Other',
       ];
       for (var i = 0; i < heads.length; i++) {
-        await db.insert('expense_heads', {'name': heads[i], 'sort_order': i});
+        await db.insert('expense_heads', {
+          'name': heads[i],
+          'sort_order': i,
+        });
       }
     }
   }
@@ -436,12 +377,8 @@ class DatabaseHelper {
 
   Future<void> updateClient(Client client) async {
     final db = await database;
-    await db.update(
-      'clients',
-      client.toMap(),
-      where: 'id = ?',
-      whereArgs: [client.id],
-    );
+    await db.update('clients', client.toMap(),
+        where: 'id = ?', whereArgs: [client.id]);
   }
 
   Future<void> deleteClient(int id) async {
@@ -458,12 +395,8 @@ class DatabaseHelper {
 
   Future<Client?> getClient(int id) async {
     final db = await database;
-    final rows = await db.query(
-      'clients',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final rows =
+        await db.query('clients', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return Client.fromMap(rows.first);
   }
@@ -479,13 +412,8 @@ class DatabaseHelper {
   Future<List<RecurringTemplate>> getTemplates() async {
     final db = await database;
     final rows = await db.rawQuery('''
-      SELECT t.*,
-        COALESCE(c.name, NULLIF(t.client_name, '')) as joined_client_name,
-        COALESCE(c.email, t.client_email) as joined_client_email,
-        COALESCE(c.phone, t.client_phone) as joined_client_phone,
-        COALESCE(c.address, t.client_address) as joined_client_address
-      FROM templates t
-      LEFT JOIN clients c ON c.id = t.client_id
+      SELECT t.*, c.name as client_name
+      FROM templates t JOIN clients c ON c.id = t.client_id
       ORDER BY t.next_due_date ASC
     ''');
     return rows.map((r) => RecurringTemplate.fromMap(r)).toList();
@@ -503,25 +431,18 @@ class DatabaseHelper {
 
   Future<void> updateTemplateStatus(int id, TemplateStatus status) async {
     final db = await database;
-    await db.update(
-      'templates',
-      {'status': status.name},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.update('templates', {'status': status.name},
+        where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> updateTemplateProgress(
-    int id,
-    String nextDueDate,
-    int occurrencesGenerated,
-  ) async {
+      int id, String nextDueDate, int occurrencesGenerated) async {
     final db = await database;
     await db.update(
       'templates',
       {
         'next_due_date': nextDueDate,
-        'occurrences_generated': occurrencesGenerated,
+        'occurrences_generated': occurrencesGenerated
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -553,12 +474,8 @@ class DatabaseHelper {
 
   Future<InvoiceRecord?> getInvoice(int id) async {
     final db = await database;
-    final rows = await db.query(
-      'invoices',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final rows =
+        await db.query('invoices', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return InvoiceRecord.fromMap(rows.first);
   }
@@ -579,13 +496,8 @@ class DatabaseHelper {
     var invoices = rows.map((r) => InvoiceRecord.fromMap(r)).toList();
     if (status != null && status != 'All') {
       final today = todayStr();
-      if (status == 'Pending' || status == 'Partial' || status == 'Overdue') {
-        invoices = invoices.where((inv) => inv.isOpen).toList();
-      } else {
-        invoices = invoices
-            .where((inv) => inv.displayStatus(today) == status)
-            .toList();
-      }
+      invoices =
+          invoices.where((inv) => inv.displayStatus(today) == status).toList();
     }
     return invoices;
   }
@@ -670,12 +582,8 @@ class DatabaseHelper {
 
   Future<void> updateTaxRate(TaxRate rate) async {
     final db = await database;
-    await db.update(
-      'tax_rates',
-      rate.toMap(),
-      where: 'id = ?',
-      whereArgs: [rate.id],
-    );
+    await db.update('tax_rates', rate.toMap(),
+        where: 'id = ?', whereArgs: [rate.id]);
   }
 
   Future<void> deleteTaxRate(int id) async {
@@ -687,10 +595,8 @@ class DatabaseHelper {
 
   Future<List<ExpenseHead>> getExpenseHeads() async {
     final db = await database;
-    final rows = await db.query(
-      'expense_heads',
-      orderBy: 'sort_order ASC, id ASC',
-    );
+    final rows =
+        await db.query('expense_heads', orderBy: 'sort_order ASC, id ASC');
     return rows.map((r) => ExpenseHead.fromMap(r)).toList();
   }
 
@@ -702,21 +608,12 @@ class DatabaseHelper {
 
   Future<void> updateExpenseHead(ExpenseHead head) async {
     final db = await database;
-    await db.update(
-      'expense_heads',
-      head.toMap(),
-      where: 'id = ?',
-      whereArgs: [head.id],
-    );
+    await db.update('expense_heads', head.toMap(),
+        where: 'id = ?', whereArgs: [head.id]);
   }
 
   Future<void> deleteExpenseHead(int id) async {
     final db = await database;
-    await db.delete(
-      'recurring_expenses',
-      where: 'head_id = ?',
-      whereArgs: [id],
-    );
     await db.delete('expenses', where: 'head_id = ?', whereArgs: [id]);
     await db.delete('expense_heads', where: 'id = ?', whereArgs: [id]);
   }
@@ -726,22 +623,11 @@ class DatabaseHelper {
     final id = await db.insert('expenses', expense.toMap());
     return ExpenseRecord(
       id: id,
-      templateId: expense.templateId,
       headId: expense.headId,
       headName: expense.headName,
       amount: expense.amount,
       expenseDate: expense.expenseDate,
       notes: expense.notes,
-    );
-  }
-
-  Future<void> updateExpense(ExpenseRecord expense) async {
-    final db = await database;
-    await db.update(
-      'expenses',
-      expense.toMap(),
-      where: 'id = ?',
-      whereArgs: [expense.id],
     );
   }
 
@@ -763,99 +649,9 @@ class DatabaseHelper {
 
   Future<double> expensesTotal() async {
     final db = await database;
-    final result = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount), 0) as s FROM expenses',
-    );
+    final result =
+        await db.rawQuery('SELECT COALESCE(SUM(amount), 0) as s FROM expenses');
     return (result.first['s'] as num?)?.toDouble() ?? 0;
-  }
-
-  // ---------- Recurring expenses ----------
-
-  static const _recurringExpenseSelect = '''
-      SELECT r.*, h.name as head_name
-      FROM recurring_expenses r
-      JOIN expense_heads h ON h.id = r.head_id
-  ''';
-
-  Future<RecurringExpense> insertRecurringExpense(
-    RecurringExpense expense,
-  ) async {
-    final db = await database;
-    final id = await db.insert('recurring_expenses', expense.toMap());
-    return expense.withId(id);
-  }
-
-  Future<List<RecurringExpense>> getRecurringExpenses() async {
-    final db = await database;
-    final rows = await db.rawQuery('''
-      $_recurringExpenseSelect
-      ORDER BY r.next_due_date ASC
-    ''');
-    return rows.map((r) => RecurringExpense.fromMap(r)).toList();
-  }
-
-  Future<List<RecurringExpense>> getActiveDueRecurringExpenses(
-    String today,
-  ) async {
-    final db = await database;
-    final rows = await db.rawQuery(
-      '''
-      $_recurringExpenseSelect
-      WHERE r.status = 'active' AND r.next_due_date <= ?
-    ''',
-      [today],
-    );
-    return rows.map((r) => RecurringExpense.fromMap(r)).toList();
-  }
-
-  Future<List<RecurringExpense>> upcomingRecurringExpenses({
-    int limit = 8,
-  }) async {
-    final db = await database;
-    final rows = await db.rawQuery(
-      '''
-      $_recurringExpenseSelect
-      WHERE r.status = 'active'
-      ORDER BY r.next_due_date ASC LIMIT ?
-    ''',
-      [limit],
-    );
-    return rows.map((r) => RecurringExpense.fromMap(r)).toList();
-  }
-
-  Future<void> updateRecurringExpenseStatus(
-    int id,
-    TemplateStatus status,
-  ) async {
-    final db = await database;
-    await db.update(
-      'recurring_expenses',
-      {'status': status.name},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<void> updateRecurringExpenseProgress(
-    int id,
-    String nextDueDate,
-    int occurrencesGenerated,
-  ) async {
-    final db = await database;
-    await db.update(
-      'recurring_expenses',
-      {
-        'next_due_date': nextDueDate,
-        'occurrences_generated': occurrencesGenerated,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<void> deleteRecurringExpense(int id) async {
-    final db = await database;
-    await db.delete('recurring_expenses', where: 'id = ?', whereArgs: [id]);
   }
 
   // ---------- Cash receipts ----------
@@ -871,16 +667,6 @@ class DatabaseHelper {
       notes: receipt.notes,
       invoiceId: receipt.invoiceId,
       invoiceNumber: receipt.invoiceNumber,
-    );
-  }
-
-  Future<void> updateCashReceipt(CashReceipt receipt) async {
-    final db = await database;
-    await db.update(
-      'cash_receipts',
-      receipt.toMap(),
-      where: 'id = ?',
-      whereArgs: [receipt.id],
     );
   }
 
@@ -902,9 +688,8 @@ class DatabaseHelper {
 
   Future<double> cashReceiptsTotal() async {
     final db = await database;
-    final result = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount), 0) as s FROM cash_receipts',
-    );
+    final result = await db
+        .rawQuery('SELECT COALESCE(SUM(amount), 0) as s FROM cash_receipts');
     return (result.first['s'] as num?)?.toDouble() ?? 0;
   }
 
@@ -918,15 +703,6 @@ class DatabaseHelper {
       batch.insert('ledger_entries', entry.toMap());
     }
     await batch.commit(noResult: true);
-  }
-
-  Future<void> deleteLedgerEntriesForRef(String refType, int refId) async {
-    final db = await database;
-    await db.delete(
-      'ledger_entries',
-      where: 'ref_type = ? AND ref_id = ?',
-      whereArgs: [refType, refId],
-    );
   }
 
   Future<List<LedgerEntry>> getLedgerEntries({int limit = 200}) async {
@@ -952,31 +728,25 @@ class DatabaseHelper {
 
   Future<List<CashReceipt>> getCashReceiptsForMonth(String monthKey) async {
     final db = await database;
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT r.*, i.invoice_number
       FROM cash_receipts r
       LEFT JOIN invoices i ON i.id = r.invoice_id
       WHERE substr(r.receipt_date, 1, 7) = ?
       ORDER BY r.receipt_date ASC, r.id ASC
-    ''',
-      [monthKey],
-    );
+    ''', [monthKey]);
     return rows.map((r) => CashReceipt.fromMap(r)).toList();
   }
 
   Future<List<ExpenseRecord>> getExpensesForMonth(String monthKey) async {
     final db = await database;
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT e.*, h.name as head_name
       FROM expenses e
       JOIN expense_heads h ON h.id = e.head_id
       WHERE substr(e.expense_date, 1, 7) = ?
       ORDER BY e.expense_date ASC, e.id ASC
-    ''',
-      [monthKey],
-    );
+    ''', [monthKey]);
     return rows.map((r) => ExpenseRecord.fromMap(r)).toList();
   }
 
@@ -1013,19 +783,15 @@ class DatabaseHelper {
 
   Future<List<AppNotification>> getNotifications({int limit = 30}) async {
     final db = await database;
-    final rows = await db.query(
-      'notifications',
-      orderBy: 'created_at DESC',
-      limit: limit,
-    );
+    final rows = await db.query('notifications',
+        orderBy: 'created_at DESC', limit: limit);
     return rows.map((r) => AppNotification.fromMap(r)).toList();
   }
 
   Future<int> countUnreadNotifications() async {
     final db = await database;
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) as c FROM notifications WHERE is_read = 0',
-    );
+    final result = await db
+        .rawQuery('SELECT COUNT(*) as c FROM notifications WHERE is_read = 0');
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
@@ -1073,27 +839,18 @@ class DatabaseHelper {
   Future<int> activeTemplatesCount() async {
     final db = await database;
     final result = await db.rawQuery(
-      "SELECT COUNT(*) as c FROM templates WHERE status = 'active'",
-    );
+        "SELECT COUNT(*) as c FROM templates WHERE status = 'active'");
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
   Future<List<RecurringTemplate>> upcomingTemplates({int limit = 8}) async {
     final db = await database;
-    final rows = await db.rawQuery(
-      '''
-      SELECT t.*,
-        COALESCE(c.name, NULLIF(t.client_name, '')) as joined_client_name,
-        COALESCE(c.email, t.client_email) as joined_client_email,
-        COALESCE(c.phone, t.client_phone) as joined_client_phone,
-        COALESCE(c.address, t.client_address) as joined_client_address
-      FROM templates t
-      LEFT JOIN clients c ON c.id = t.client_id
+    final rows = await db.rawQuery('''
+      SELECT t.*, c.name as client_name
+      FROM templates t JOIN clients c ON c.id = t.client_id
       WHERE t.status = 'active'
       ORDER BY t.next_due_date ASC LIMIT ?
-    ''',
-      [limit],
-    );
+    ''', [limit]);
     return rows.map((r) => RecurringTemplate.fromMap(r)).toList();
   }
 
@@ -1120,20 +877,17 @@ class DatabaseHelper {
     final start = DateTime(now.year, now.month - (months - 1), 1);
     final startKey =
         '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}';
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT substr(issue_date, 1, 7) as month_key,
              COALESCE(SUM(total), 0) as amount
       FROM invoices
       WHERE status != 'Cancelled' AND substr(issue_date, 1, 7) >= ?
       GROUP BY month_key
       ORDER BY month_key ASC
-    ''',
-      [startKey],
-    );
+    ''', [startKey]);
     final byMonth = {
       for (final row in rows)
-        row['month_key'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0,
+        row['month_key'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0
     };
     return _fillMonthlySeries(months, byMonth);
   }
@@ -1144,20 +898,17 @@ class DatabaseHelper {
     final start = DateTime(now.year, now.month - (months - 1), 1);
     final startKey =
         '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}';
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT substr(expense_date, 1, 7) as month_key,
              COALESCE(SUM(amount), 0) as amount
       FROM expenses
       WHERE substr(expense_date, 1, 7) >= ?
       GROUP BY month_key
       ORDER BY month_key ASC
-    ''',
-      [startKey],
-    );
+    ''', [startKey]);
     final byMonth = {
       for (final row in rows)
-        row['month_key'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0,
+        row['month_key'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0
     };
     return _fillMonthlySeries(months, byMonth);
   }
@@ -1168,28 +919,23 @@ class DatabaseHelper {
     final start = DateTime(now.year, now.month - (months - 1), 1);
     final startKey =
         '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}';
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT substr(receipt_date, 1, 7) as month_key,
              COALESCE(SUM(amount), 0) as amount
       FROM cash_receipts
       WHERE substr(receipt_date, 1, 7) >= ?
       GROUP BY month_key
       ORDER BY month_key ASC
-    ''',
-      [startKey],
-    );
+    ''', [startKey]);
     final byMonth = {
       for (final row in rows)
-        row['month_key'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0,
+        row['month_key'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0
     };
     return _fillMonthlySeries(months, byMonth);
   }
 
   List<MonthlyAmount> _fillMonthlySeries(
-    int months,
-    Map<String, double> byMonth,
-  ) {
+      int months, Map<String, double> byMonth) {
     final now = DateTime.now();
     const labels = [
       'Jan',
@@ -1203,20 +949,18 @@ class DatabaseHelper {
       'Sep',
       'Oct',
       'Nov',
-      'Dec',
+      'Dec'
     ];
     final result = <MonthlyAmount>[];
     for (var i = months - 1; i >= 0; i--) {
       final date = DateTime(now.year, now.month - i, 1);
       final key =
           '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}';
-      result.add(
-        MonthlyAmount(
-          monthKey: key,
-          label: labels[date.month - 1],
-          amount: byMonth[key] ?? 0,
-        ),
-      );
+      result.add(MonthlyAmount(
+        monthKey: key,
+        label: labels[date.month - 1],
+        amount: byMonth[key] ?? 0,
+      ));
     }
     return result;
   }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 
 import '../services/backup_service.dart';
@@ -22,6 +23,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   BackupPreferences _preferences = const BackupPreferences();
   List<File> _backups = [];
   String? _googleAccount;
+  List<drive.File> _driveBackups = [];
+  String? _driveError;
+  bool _driveLoaded = false;
   bool _loading = true;
   bool _busy = false;
 
@@ -39,18 +43,22 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   Future<void> _load() async {
-    final results = await Future.wait([
-      _service.loadPreferences(),
-      _service.listBackups(),
-      _service.connectedGoogleAccount,
-    ]);
-    if (!mounted) return;
-    _preferences = results[0] as BackupPreferences;
-    _backups = results[1] as List<File>;
-    _googleAccount = results[2] as String?;
-    _customDaysController.text = '${_preferences.customDays}';
-    _keepLastController.text = '${_preferences.keepLast}';
-    setState(() => _loading = false);
+    try {
+      _preferences = await _service.loadPreferences();
+      _backups = await _service.listBackups();
+      if (!mounted) return;
+      _customDaysController.text = '${_preferences.customDays}';
+      _keepLastController.text = '${_preferences.keepLast}';
+      try {
+        _googleAccount = await _service.connectedGoogleAccount;
+      } catch (error) {
+        _driveError = 'Google Drive connection failed: $error';
+      }
+    } catch (error) {
+      if (mounted) _showMessage('Could not load backups: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _savePreferences() async {
@@ -75,6 +83,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       await _savePreferences();
       final backup = await _service.createBackup(preferences: _preferences);
       await _refreshBackups();
+      if (_googleAccount != null) await _refreshDriveBackups();
       if (mounted) {
         final cloudError = _service.lastCloudError;
         _showMessage(cloudError == null
@@ -117,9 +126,16 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     );
     if (confirmed != true || !mounted) return;
     await _runBusy(() async {
-      await _service.createBackup(
-          preferences: _preferences.copyWith(uploadToDrive: false));
-      await _service.restoreBackup(backup);
+      final temp =
+          await Directory.systemTemp.createTemp('ledger-restore-source-');
+      try {
+        final source = await backup.copy(p.join(temp.path, 'backup.zip'));
+        await _service.createBackup(
+            preferences: _preferences.copyWith(uploadToDrive: false));
+        await _service.restoreBackup(source);
+      } finally {
+        await temp.delete(recursive: true);
+      }
       if (!mounted) return;
       await AppStateScope.of(context).bootstrap();
       await _refreshBackups();
@@ -149,22 +165,56 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     }
   }
 
-  Future<void> _setDriveEnabled(bool enabled) async {
-    if (enabled) {
-      try {
-        final email = await _service.connectGoogleDrive();
-        _googleAccount = email;
-      } catch (error) {
-        if (mounted) _showMessage('$error');
-        return;
+  Future<void> _setDriveEnabled(bool enabled) => _runBusy(() async {
+        if (enabled) {
+          _googleAccount = await _service.connectGoogleDrive();
+        } else {
+          await _service.disconnectGoogleDrive();
+          _googleAccount = null;
+          _driveBackups = [];
+          _driveError = null;
+          _driveLoaded = false;
+        }
+        _preferences = _preferences.copyWith(uploadToDrive: enabled);
+        await _service.savePreferences(_preferences);
+        if (enabled) await _refreshDriveBackups();
+      });
+
+  Future<void> _refreshDriveBackups() async {
+    try {
+      final backups = await _service.listGoogleDriveBackups();
+      if (!mounted) return;
+      setState(() {
+        _driveBackups = backups;
+        _driveError = null;
+        _driveLoaded = true;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _driveError = 'Could not load Drive backups: $error');
       }
-    } else {
-      await _service.disconnectGoogleDrive();
-      _googleAccount = null;
     }
-    _preferences = _preferences.copyWith(uploadToDrive: enabled);
-    await _service.savePreferences(_preferences);
-    if (mounted) setState(() {});
+  }
+
+  Future<void> _upload(File backup) => _runBusy(() async {
+        await _service.uploadToGoogleDrive(backup,
+            keepLast: _preferences.keepLast);
+        await _refreshDriveBackups();
+        if (mounted) _showMessage('Backup uploaded to Google Drive.');
+      });
+
+  Future<void> _restoreDrive(drive.File remote) async {
+    File? downloaded;
+    await _runBusy(() async {
+      downloaded = await _service.downloadGoogleDriveBackup(remote.id!);
+    });
+    final backup = downloaded;
+    if (backup == null) return;
+    try {
+      if (mounted) await _confirmRestore(backup);
+    } finally {
+      await backup.parent.delete(recursive: true);
+    }
   }
 
   Future<void> _refreshBackups() async {
@@ -265,13 +315,66 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   _sectionTitle('Google Drive'),
                   const SizedBox(height: 8),
                   Card(
-                    child: SwitchListTile(
-                      secondary: const Icon(Icons.add_to_drive_outlined),
-                      title: const Text('Upload after each backup'),
-                      subtitle: Text(_googleAccount ??
-                          'Not connected — local backup remains enabled'),
-                      value: _preferences.uploadToDrive,
-                      onChanged: _busy ? null : _setDriveEnabled,
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          secondary: const Icon(Icons.add_to_drive_outlined),
+                          title: const Text('Upload after each backup'),
+                          subtitle: Text(
+                              _googleAccount ?? 'Connect your Google account'),
+                          value: _preferences.uploadToDrive,
+                          onChanged: _busy ? null : _setDriveEnabled,
+                        ),
+                        const Padding(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Text(
+                              'Backups are stored privately in your Google account. '
+                              'Restore them here after reinstalling. Scheduled backups run when the app opens or resumes.'),
+                        ),
+                        if (_googleAccount == null &&
+                            _preferences.uploadToDrive)
+                          TextButton(
+                            onPressed:
+                                _busy ? null : () => _setDriveEnabled(true),
+                            child: const Text('Reconnect Google Drive'),
+                          ),
+                        if (_googleAccount != null)
+                          TextButton.icon(
+                            onPressed: _busy
+                                ? null
+                                : () => _runBusy(_refreshDriveBackups),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Refresh Drive backups'),
+                          ),
+                        if (_driveError != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(_driveError!),
+                          ),
+                        if (_driveLoaded && _driveBackups.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text(
+                                'No Drive backups yet. Tap Back up now to create one.'),
+                          ),
+                        ..._driveBackups.map((backup) => ListTile(
+                              leading: const Icon(Icons.cloud_done_outlined),
+                              title: Text(backup.createdTime == null
+                                  ? (backup.name ?? 'Ledger backup')
+                                  : DateFormat.yMMMd()
+                                      .add_jm()
+                                      .format(backup.createdTime!.toLocal())),
+                              subtitle: Text(backup.name ?? 'Ledger backup'),
+                              trailing: IconButton(
+                                tooltip: 'Restore from Google Drive',
+                                icon: const Icon(Icons.restore),
+                                onPressed: _busy || backup.id == null
+                                    ? null
+                                    : () => _restoreDrive(backup),
+                              ),
+                            )),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -326,15 +429,20 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             Text('${sizeMb.toStringAsFixed(2)} MB · ${p.basename(file.path)}'),
         onTap: _busy ? null : () => _confirmRestore(file),
         trailing: PopupMenuButton<String>(
+          enabled: !_busy,
           onSelected: (action) {
             if (action == 'restore') _confirmRestore(file);
             if (action == 'export') _export(file);
             if (action == 'delete') _delete(file);
+            if (action == 'upload') _upload(file);
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'restore', child: Text('Restore')),
-            PopupMenuItem(value: 'export', child: Text('Export a copy')),
-            PopupMenuItem(value: 'delete', child: Text('Delete')),
+          itemBuilder: (_) => [
+            if (_googleAccount != null)
+              const PopupMenuItem(
+                  value: 'upload', child: Text('Upload to Google Drive')),
+            const PopupMenuItem(value: 'restore', child: Text('Restore')),
+            const PopupMenuItem(value: 'export', child: Text('Export a copy')),
+            const PopupMenuItem(value: 'delete', child: Text('Delete')),
           ],
         ),
       ),

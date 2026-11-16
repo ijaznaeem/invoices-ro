@@ -24,7 +24,6 @@ class AppState extends ChangeNotifier {
   List<TaxRate> taxRates = [];
   List<ExpenseHead> expenseHeads = [];
   List<ExpenseRecord> expenses = [];
-  List<RecurringExpense> recurringExpenses = [];
   List<CashReceipt> cashReceipts = [];
   List<LedgerEntry> ledgerEntries = [];
   Map<String, double> ledgerBalances = {};
@@ -37,38 +36,12 @@ class AppState extends ChangeNotifier {
   int activeTemplateCount = 0;
   int unreadNotifications = 0;
   List<RecurringTemplate> upcoming = [];
-  List<RecurringExpense> upcomingExpenses = [];
   Map<String, int> invoiceStatusCounts = {};
   List<MonthlyAmount> monthlyInvoiced = [];
   List<MonthlyAmount> monthlyExpenses = [];
   List<MonthlyAmount> monthlyCash = [];
 
-  /// 0 = income, 1 = expenses on the Money tab.
-  int moneyTabIndex = 0;
-
   bool isLoading = false;
-
-  double get monthCollected {
-    final key = monthKey();
-    return monthlyCash.where((m) => m.monthKey == key).firstOrNull?.amount ?? 0;
-  }
-
-  double get monthSpent {
-    final key = monthKey();
-    return monthlyExpenses
-            .where((m) => m.monthKey == key)
-            .firstOrNull
-            ?.amount ??
-        0;
-  }
-
-  double get monthNet => monthCollected - monthSpent;
-
-  void setMoneyTabIndex(int index) {
-    if (moneyTabIndex == index) return;
-    moneyTabIndex = index;
-    notifyListeners();
-  }
 
   Future<void> bootstrap() async {
     await runGenerationCheck(silent: true);
@@ -82,7 +55,6 @@ class AppState extends ChangeNotifier {
       reloadTaxRates(),
       reloadExpenseHeads(),
       reloadExpenses(),
-      reloadRecurringExpenses(),
       reloadCashReceipts(),
       reloadLedger(),
     ]);
@@ -97,7 +69,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<GenerationRunResult> runGenerationCheck({bool silent = false}) async {
+  Future<int> runGenerationCheck({bool silent = false}) async {
     final generated = await _engine.run();
     if (!silent) {
       await Future.wait([
@@ -105,8 +77,6 @@ class AppState extends ChangeNotifier {
         reloadInvoices(),
         reloadDashboard(),
         reloadLedger(),
-        reloadExpenses(),
-        reloadRecurringExpenses(),
       ]);
     }
     return generated;
@@ -142,7 +112,6 @@ class AppState extends ChangeNotifier {
       _db.activeTemplatesCount(),
       _db.countUnreadNotifications(),
       _db.upcomingTemplates(),
-      _db.upcomingRecurringExpenses(),
       _db.getNotifications(),
       _db.invoiceStatusCounts(),
       _db.monthlyInvoiceTotals(),
@@ -157,14 +126,13 @@ class AppState extends ChangeNotifier {
     activeTemplateCount = results[3] as int;
     unreadNotifications = results[4] as int;
     upcoming = results[5] as List<RecurringTemplate>;
-    upcomingExpenses = results[6] as List<RecurringExpense>;
-    notifications = results[7] as List<AppNotification>;
-    invoiceStatusCounts = results[8] as Map<String, int>;
-    monthlyInvoiced = results[9] as List<MonthlyAmount>;
-    monthlyExpenses = results[10] as List<MonthlyAmount>;
-    monthlyCash = results[11] as List<MonthlyAmount>;
-    cashReceivedTotal = results[12] as double;
-    expensesTotalAmount = results[13] as double;
+    notifications = results[6] as List<AppNotification>;
+    invoiceStatusCounts = results[7] as Map<String, int>;
+    monthlyInvoiced = results[8] as List<MonthlyAmount>;
+    monthlyExpenses = results[9] as List<MonthlyAmount>;
+    monthlyCash = results[10] as List<MonthlyAmount>;
+    cashReceivedTotal = results[11] as double;
+    expensesTotalAmount = results[12] as double;
     notifyListeners();
   }
 
@@ -208,9 +176,12 @@ class AppState extends ChangeNotifier {
     final saved = await _db.insertInvoice(invoice);
     await _postInvoiceToLedger(saved);
     await _db.insertNotification(
-      'Invoice ${saved.invoiceNumber} created for ${saved.clientName ?? 'client'}',
-    );
-    await Future.wait([reloadInvoices(), reloadDashboard(), reloadLedger()]);
+        'Invoice ${saved.invoiceNumber} created for ${saved.clientName ?? 'client'}');
+    await Future.wait([
+      reloadInvoices(),
+      reloadDashboard(),
+      reloadLedger(),
+    ]);
   }
 
   Future<String> nextInvoiceNumber(String issueDate) async {
@@ -293,12 +264,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteExpenseHead(int id) async {
     await _db.deleteExpenseHead(id);
-    await Future.wait([
-      reloadExpenseHeads(),
-      reloadExpenses(),
-      reloadRecurringExpenses(),
-      reloadDashboard(),
-    ]);
+    await Future.wait([reloadExpenseHeads(), reloadExpenses(), reloadDashboard()]);
   }
 
   Future<void> reloadExpenses() async {
@@ -306,47 +272,44 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> reloadRecurringExpenses() async {
-    recurringExpenses = await _db.getRecurringExpenses();
-    notifyListeners();
-  }
-
-  Future<void> addRecurringExpense(RecurringExpense expense) async {
-    await _db.insertRecurringExpense(expense);
-    await Future.wait([reloadRecurringExpenses(), reloadDashboard()]);
-  }
-
-  Future<void> toggleRecurringExpenseStatus(RecurringExpense expense) async {
-    final next = expense.status == TemplateStatus.active
-        ? TemplateStatus.paused
-        : TemplateStatus.active;
-    await _db.updateRecurringExpenseStatus(expense.id!, next);
-    await Future.wait([reloadRecurringExpenses(), reloadDashboard()]);
-  }
-
-  Future<void> deleteRecurringExpense(int id) async {
-    await _db.deleteRecurringExpense(id);
-    await Future.wait([reloadRecurringExpenses(), reloadDashboard()]);
-  }
-
   Future<void> addExpense(ExpenseRecord expense) async {
     final saved = await _db.insertExpense(expense);
-    await _postExpenseToLedger(saved);
-    await Future.wait([reloadExpenses(), reloadLedger(), reloadDashboard()]);
-  }
-
-  Future<void> updateExpense(ExpenseRecord expense) async {
-    if (expense.id == null) return;
-    await _db.deleteLedgerEntriesForRef('expense', expense.id!);
-    await _db.updateExpense(expense);
-    await _postExpenseToLedger(expense);
-    await Future.wait([reloadExpenses(), reloadLedger(), reloadDashboard()]);
+    final headName = expenseHeads
+            .where((h) => h.id == saved.headId)
+            .map((h) => h.name)
+            .firstOrNull ??
+        expense.headName ??
+        'Expense';
+    await _db.insertLedgerEntries([
+      LedgerEntry(
+        entryDate: saved.expenseDate,
+        account: 'Expense — $headName',
+        description: saved.notes?.trim().isNotEmpty == true
+            ? saved.notes!
+            : 'Expense under $headName',
+        debit: saved.amount,
+        refType: 'expense',
+        refId: saved.id,
+      ),
+      LedgerEntry(
+        entryDate: saved.expenseDate,
+        account: 'Cash',
+        description: 'Expense paid — $headName',
+        credit: saved.amount,
+        refType: 'expense',
+        refId: saved.id,
+      ),
+    ]);
+    await Future.wait([
+      reloadExpenses(),
+      reloadLedger(),
+      reloadDashboard(),
+    ]);
   }
 
   Future<void> deleteExpense(int id) async {
-    await _db.deleteLedgerEntriesForRef('expense', id);
     await _db.deleteExpense(id);
-    await Future.wait([reloadExpenses(), reloadLedger(), reloadDashboard()]);
+    await Future.wait([reloadExpenses(), reloadDashboard()]);
   }
 
   Future<void> reloadCashReceipts() async {
@@ -356,19 +319,26 @@ class AppState extends ChangeNotifier {
 
   Future<void> addCashReceipt(CashReceipt receipt) async {
     final saved = await _db.insertCashReceipt(receipt);
-    await _postCashReceiptToLedger(saved);
-    await Future.wait([
-      reloadCashReceipts(),
-      reloadLedger(),
-      reloadDashboard(),
+    await _db.insertLedgerEntries([
+      LedgerEntry(
+        entryDate: saved.receiptDate,
+        account: 'Cash',
+        description: 'Cash received from ${saved.receivedFrom}',
+        debit: saved.amount,
+        refType: 'cash_receipt',
+        refId: saved.id,
+      ),
+      LedgerEntry(
+        entryDate: saved.receiptDate,
+        account: 'Other Income',
+        description: saved.notes?.trim().isNotEmpty == true
+            ? saved.notes!
+            : 'Cash receipt',
+        credit: saved.amount,
+        refType: 'cash_receipt',
+        refId: saved.id,
+      ),
     ]);
-  }
-
-  Future<void> updateCashReceipt(CashReceipt receipt) async {
-    if (receipt.id == null || !receipt.isStandalone) return;
-    await _db.deleteLedgerEntriesForRef('cash_receipt', receipt.id!);
-    await _db.updateCashReceipt(receipt);
-    await _postCashReceiptToLedger(receipt);
     await Future.wait([
       reloadCashReceipts(),
       reloadLedger(),
@@ -377,13 +347,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteCashReceipt(int id) async {
-    await _db.deleteLedgerEntriesForRef('cash_receipt', id);
     await _db.deleteCashReceipt(id);
-    await Future.wait([
-      reloadCashReceipts(),
-      reloadLedger(),
-      reloadDashboard(),
-    ]);
+    await Future.wait([reloadCashReceipts(), reloadDashboard()]);
   }
 
   Future<void> reloadLedger() async {
@@ -441,15 +406,13 @@ class AppState extends ChangeNotifier {
     final applied = amount > remaining ? remaining : amount;
     if (applied <= 0) return;
 
-    final payment = await _db.insertInvoicePayment(
-      InvoicePayment(
-        invoiceId: invoice.id!,
-        amount: applied,
-        paymentDate: paymentDate,
-        method: method,
-        notes: notes,
-      ),
-    );
+    final payment = await _db.insertInvoicePayment(InvoicePayment(
+      invoiceId: invoice.id!,
+      amount: applied,
+      paymentDate: paymentDate,
+      method: method,
+      notes: notes,
+    ));
 
     final newPaid = invoice.amountPaid + applied;
     final status = newPaid + 0.0001 >= invoice.total
@@ -462,19 +425,17 @@ class AppState extends ChangeNotifier {
       paidDate: status == InvoiceStatus.paid ? paymentDate : invoice.paidDate,
     );
 
-    await _db.insertCashReceipt(
-      CashReceipt(
-        amount: applied,
-        receiptDate: paymentDate,
-        receivedFrom: invoice.clientName?.trim().isNotEmpty == true
-            ? invoice.clientName!
-            : 'Client',
-        notes: notes ??
-            'Payment for ${invoice.invoiceNumber}${method.isNotEmpty ? ' via $method' : ''}',
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-      ),
-    );
+    await _db.insertCashReceipt(CashReceipt(
+      amount: applied,
+      receiptDate: paymentDate,
+      receivedFrom: invoice.clientName?.trim().isNotEmpty == true
+          ? invoice.clientName!
+          : 'Client',
+      notes: notes ??
+          'Payment for ${invoice.invoiceNumber}${method.isNotEmpty ? ' via $method' : ''}',
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+    ));
 
     await _db.insertLedgerEntries([
       LedgerEntry(
@@ -496,8 +457,7 @@ class AppState extends ChangeNotifier {
     ]);
 
     await _db.insertNotification(
-      'Received ${money(applied)} for ${invoice.invoiceNumber}',
-    );
+        'Received ${money(applied)} for ${invoice.invoiceNumber}');
 
     await Future.wait([
       reloadInvoices(),
@@ -539,58 +499,6 @@ class AppState extends ChangeNotifier {
     await Future.wait([reloadInvoices(), reloadDashboard()]);
   }
 
-  Future<void> _postExpenseToLedger(ExpenseRecord expense) async {
-    final headName = expenseHeads
-            .where((h) => h.id == expense.headId)
-            .map((h) => h.name)
-            .firstOrNull ??
-        expense.headName ??
-        'Expense';
-    await _db.insertLedgerEntries([
-      LedgerEntry(
-        entryDate: expense.expenseDate,
-        account: 'Expense — $headName',
-        description: expense.notes?.trim().isNotEmpty == true
-            ? expense.notes!
-            : 'Expense under $headName',
-        debit: expense.amount,
-        refType: 'expense',
-        refId: expense.id,
-      ),
-      LedgerEntry(
-        entryDate: expense.expenseDate,
-        account: 'Cash',
-        description: 'Expense paid — $headName',
-        credit: expense.amount,
-        refType: 'expense',
-        refId: expense.id,
-      ),
-    ]);
-  }
-
-  Future<void> _postCashReceiptToLedger(CashReceipt receipt) async {
-    await _db.insertLedgerEntries([
-      LedgerEntry(
-        entryDate: receipt.receiptDate,
-        account: 'Cash',
-        description: 'Cash received from ${receipt.receivedFrom}',
-        debit: receipt.amount,
-        refType: 'cash_receipt',
-        refId: receipt.id,
-      ),
-      LedgerEntry(
-        entryDate: receipt.receiptDate,
-        account: 'Other Income',
-        description: receipt.notes?.trim().isNotEmpty == true
-            ? receipt.notes!
-            : 'Cash receipt',
-        credit: receipt.amount,
-        refType: 'cash_receipt',
-        refId: receipt.id,
-      ),
-    ]);
-  }
-
   Future<void> _postInvoiceToLedger(InvoiceRecord invoice) async {
     final entries = <LedgerEntry>[
       LedgerEntry(
@@ -611,16 +519,14 @@ class AppState extends ChangeNotifier {
       ),
     ];
     if (invoice.tax > 0) {
-      entries.add(
-        LedgerEntry(
-          entryDate: invoice.issueDate,
-          account: 'Tax Payable',
-          description: 'Invoice ${invoice.invoiceNumber} — tax',
-          credit: invoice.tax,
-          refType: 'invoice',
-          refId: invoice.id,
-        ),
-      );
+      entries.add(LedgerEntry(
+        entryDate: invoice.issueDate,
+        account: 'Tax Payable',
+        description: 'Invoice ${invoice.invoiceNumber} — tax',
+        credit: invoice.tax,
+        refType: 'invoice',
+        refId: invoice.id,
+      ));
     }
     await _db.insertLedgerEntries(entries);
   }

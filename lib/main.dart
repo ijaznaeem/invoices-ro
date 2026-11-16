@@ -9,9 +9,9 @@ import 'screens/backup_restore_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/accounts_screens.dart';
 import 'screens/invoices_screen.dart';
-import 'screens/money_screen.dart';
 import 'screens/payment_options_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/templates_screen.dart';
 import 'state/app_state.dart';
 import 'state/app_state_scope.dart';
 import 'theme/app_theme.dart';
@@ -73,10 +73,10 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _index = 0;
 
-  static const _titles = ['Dashboard', 'Money', 'Invoices', 'Clients'];
+  static const _titles = ['Dashboard', 'Recurring', 'Invoices', 'Clients'];
   static const _screens = [
     DashboardScreen(),
-    MoneyScreen(),
+    TemplatesScreen(),
     InvoicesScreen(),
     ClientsScreen(),
   ];
@@ -118,7 +118,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               final generated = await state.runGenerationCheck();
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(_generationMessage(generated))),
+                  SnackBar(
+                      content: Text(generated > 0
+                          ? 'Generated $generated invoice(s).'
+                          : 'No invoices were due.')),
                 );
               }
             },
@@ -180,7 +183,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           NavigationDestination(
               icon: Icon(Icons.account_balance_wallet_rounded),
               selectedIcon: Icon(Icons.account_balance_wallet_rounded),
-              label: 'Money'),
+              label: 'Recurring'),
           NavigationDestination(
               icon: Icon(Icons.shopping_cart_checkout_rounded),
               selectedIcon: Icon(Icons.shopping_cart_checkout_rounded),
@@ -193,18 +196,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       ),
     );
   }
-}
-
-String _generationMessage(GenerationRunResult result) {
-  if (result.total == 0) return 'Nothing was due.';
-  final parts = <String>[];
-  if (result.invoicesGenerated > 0) {
-    parts.add('${result.invoicesGenerated} invoice(s)');
-  }
-  if (result.expensesGenerated > 0) {
-    parts.add('${result.expensesGenerated} expense(s)');
-  }
-  return 'Generated ${parts.join(' and ')}.';
 }
 
 // ─── Professional nav drawer ─────────────────────────────────────────────────
@@ -231,7 +222,7 @@ class _LedgerDrawer extends StatelessWidget {
     (
       icon: Icons.account_balance_wallet_rounded,
       activeIcon: Icons.account_balance_wallet_rounded,
-      label: 'Money'
+      label: 'Recurring'
     ),
     (
       icon: Icons.shopping_cart_checkout_rounded,
@@ -347,14 +338,18 @@ class _LedgerDrawer extends StatelessWidget {
                 ),
                 ListTile(
                   leading: const Icon(Icons.payments_rounded),
-                  title:
-                      Text('Income', style: TextStyle(color: drawerTextColor)),
+                  title: Text('Cash receipts',
+                      style: TextStyle(color: drawerTextColor)),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                   onTap: () {
-                    AppStateScope.of(context).setMoneyTabIndex(0);
-                    onSelectTab(1);
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const CashReceiptsScreen()),
+                    );
                   },
                 ),
                 ListTile(
@@ -365,8 +360,12 @@ class _LedgerDrawer extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                   onTap: () {
-                    AppStateScope.of(context).setMoneyTabIndex(1);
-                    onSelectTab(1);
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const ExpensesScreen()),
+                    );
                   },
                 ),
                 const Divider(indent: 16, endIndent: 16, height: 24),
@@ -391,8 +390,9 @@ class _LedgerDrawer extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color:
-                                Theme.of(context).colorScheme.primaryContainer,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primaryContainer,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(

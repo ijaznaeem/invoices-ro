@@ -16,19 +16,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final upcomingItems = <({String date, String title, String subtitle})>[
-      ...state.upcoming.map((t) => (
-            date: t.nextDueDate,
-            title: t.displayName,
-            subtitle: 'Invoice · ${frequencyLabel(t.frequency)}',
-          )),
-      ...state.upcomingExpenses.map((t) => (
-            date: t.nextDueDate,
-            title: t.displayName,
-            subtitle:
-                'Expense · ${t.headName ?? 'Expense'} · ${frequencyLabel(t.frequency)}',
-          )),
-    ]..sort((a, b) => a.date.compareTo(b.date));
+    final netCash = state.cashReceivedTotal - state.expensesTotalAmount;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -43,12 +31,12 @@ class DashboardScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           Text(
-            monthTitle(DateTime.now()),
+            'Today is ${formatDate(todayStr())}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 6),
           Text(
-            'This month',
+            'Business overview',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 14),
@@ -60,21 +48,21 @@ class DashboardScreen extends StatelessWidget {
             crossAxisSpacing: 10,
             childAspectRatio: 1.55,
             children: [
+              StatCard(label: 'Outstanding', value: money(state.outstanding)),
               StatCard(
-                  label: 'Collected',
-                  value: money(state.monthCollected),
+                  label: 'Cash received',
+                  value: money(state.cashReceivedTotal),
                   valueColor: LedgerColors.paid),
               StatCard(
-                  label: 'Spent',
-                  value: money(state.monthSpent),
+                  label: 'Expenses',
+                  value: money(state.expensesTotalAmount),
                   valueColor: LedgerColors.overdue),
               StatCard(
-                  label: 'Left over',
-                  value: money(state.monthNet),
-                  valueColor: state.monthNet >= 0
+                  label: 'Net cash',
+                  value: money(netCash),
+                  valueColor: netCash >= 0
                       ? LedgerColors.secondary
                       : LedgerColors.overdue),
-              StatCard(label: 'Still owed', value: money(state.outstanding)),
             ],
           ),
           const SizedBox(height: 10),
@@ -134,20 +122,19 @@ class DashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _SectionCard(
-            title: 'Coming up',
-            child: upcomingItems.isEmpty
+            title: 'Upcoming due dates',
+            child: state.upcoming.isEmpty
                 ? const EmptyState(
                     title: 'Nothing scheduled',
-                    subtitle: 'Recurring invoices and expenses show up here.',
+                    subtitle: 'Create a recurring invoice to see it here.',
                     icon: Icons.event_available_outlined,
                   )
                 : Column(
-                    children: upcomingItems
-                        .take(8)
+                    children: state.upcoming
                         .map((t) => LedgerRow(
-                              title: t.title,
-                              subtitle: t.subtitle,
-                              trailingFigure: formatDate(t.date),
+                              title: t.clientName ?? 'Client',
+                              subtitle: frequencyLabel(t.frequency),
+                              trailingFigure: formatDate(t.nextDueDate),
                             ))
                         .toList(),
                   ),

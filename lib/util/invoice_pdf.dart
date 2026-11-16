@@ -6,7 +6,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/models.dart';
-import 'date_utils.dart';
 
 Future<Uint8List> buildProfessionalInvoicePdf({
   required InvoiceRecord invoice,
@@ -189,7 +188,6 @@ pw.Widget _clientAndMeta(InvoiceRecord invoice, Client? client) {
           children: [
             _metaRow('Issue Date', _safeAscii(_fmtDate(invoice.issueDate))),
             _metaRow('Due Date', _safeAscii(_fmtDate(invoice.dueDate))),
-            _metaRow('Type', _safeAscii(invoiceTypeLabel(invoice))),
             _metaRow('Status', _safeAscii(invoice.status.label.toUpperCase())),
           ],
         ),

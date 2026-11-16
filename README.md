@@ -1,20 +1,18 @@
 # Ledger — Invoices RO
 
-Private, on-device invoicing and bookkeeping app for creating invoices, tracking payments, cash, and expenses. Data stays on the device unless you export a backup.
+Private, on-device invoicing and bookkeeping app for creating invoices, tracking payments, cash, and expenses. Data stays on the device unless you export a backup or enable Google Drive backups.
 
 ## Features
 
-- **Dashboard** — this-month collected / spent / leftover, plus still owed
-- **Money** — income and expenses by month, with edit and delete
-- **Invoices** — search, duplicate, one-off and recurring schedules, PDF preview/share
+- **Invoices** — one-off and recurring schedules, PDF preview/share
 - **Partial payments** — record any amount; status moves Pending → Partial → Paid
 - **Accounts ledger** — invoices and payments posted automatically (AR, sales, tax, cash)
 - **Cash receipts** — payment history plus standalone receipts
 - **Expenses by head** — Office, Travel, Utilities, and custom categories
-- **Recurring expenses** — rent, utilities, and other repeating costs auto-posted on due dates
 - **Tax rates** — manage % options in Settings; invoices pick from the list (default: No Tax)
-- **Clients** — optional saved contacts for faster billing
-- **Backup & restore** — local snapshots; optional Google Drive upload
+- **Clients** — saved contacts for faster billing
+- **Dashboard** — outstanding balance, cash/expense KPIs, and charts
+- **Backup & restore** — local snapshots; optional Google Drive upload, browse, and restore
 - **Business settings** — logo, currency, payment methods on PDFs, terms, signature
 
 ## Requirements
@@ -59,6 +57,12 @@ build/app/outputs/flutter-apk/app-release.apk
 
 Copy that file to the phone and open it to sideload, or use `adb install -r` with the same path.
 
+## Google Drive setup
+
+Follow [Google Drive setup](docs/google_drive_setup.md) to enable the API and register
+the Android OAuth client for this package and signing certificate. Then connect
+your account from **Backup & Restore** and tap **Back up now**.
+
 ## Project structure
 
 ```
@@ -78,11 +82,10 @@ lib/
 
 | Action | Result |
 |--------|--------|
-| Create invoice | Full-screen form; tax from Settings list; posts to Accounts Receivable / Sales / Tax Payable. Client can be a walk-in (not saved) |
+| Create invoice | Full-screen form; tax from Settings list; posts to Accounts Receivable / Sales / Tax Payable |
 | Record payment | Updates `amount_paid`, cash receipt, ledger Cash ↔ AR |
-| Add / edit expense | Debits expense head, credits Cash; delete reverses the posting |
-| Record income | Standalone cash in (invoice payments also appear here) |
-| Recurring due | Generation engine creates invoices and expenses when the app opens/resumes |
+| Add expense | Debits expense head, credits Cash |
+| Recurring due | Generation engine creates invoices when the app opens/resumes |
 
 ## Settings you should configure first
 

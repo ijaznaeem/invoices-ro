@@ -20,7 +20,7 @@ void main() {
     );
 
     expect(find.text('Dashboard'), findsNWidgets(2));
-    expect(find.text('Money'), findsOneWidget);
+    expect(find.text('Recurring'), findsOneWidget);
     expect(find.text('Invoices'), findsOneWidget);
     expect(find.text('Clients'), findsOneWidget);
   });

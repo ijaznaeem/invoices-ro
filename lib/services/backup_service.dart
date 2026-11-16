@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import '../db/database_helper.dart';
 import '../models/models.dart';
 import 'public_file_service.dart';
+import 'drive_backup_store.dart';
 
 enum BackupFrequency { daily, weekly, custom }
 
@@ -149,7 +150,7 @@ class BackupService {
       }
       final manifest = utf8.encode(jsonEncode({
         'format': 1,
-        'databaseVersion': 5,
+        'databaseVersion': 6,
         'createdAt': now.toUtc().toIso8601String(),
         'app': 'Ledger',
         'logo': logoEntry,
@@ -185,25 +186,27 @@ class BackupService {
     final target = await FilePicker.saveFile(
       dialogTitle: 'Export Ledger backup',
       fileName: p.basename(backup.path),
-      mimeType: 'application/zip',
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
       bytes: await backup.readAsBytes(),
     );
     if (target == null) return;
   }
 
   Future<File?> pickBackup() async {
-    final files = await FilePicker.pickFiles(
+    final result = await FilePicker.pickFiles(
       dialogTitle: 'Select a Ledger backup',
       type: FileType.custom,
       allowedExtensions: ['zip'],
+      withData: true,
     );
-    if (files.isEmpty) return null;
-    final picked = files.first;
+    final picked = result?.files.single;
+    if (picked == null) return null;
     if (picked.path != null) return File(picked.path!);
-    final bytes = await picked.readAsBytes();
+    if (picked.bytes == null) return null;
     final file = File(
         p.join((await Directory.systemTemp.createTemp()).path, picked.name));
-    return file..writeAsBytesSync(bytes);
+    return file..writeAsBytesSync(picked.bytes!);
   }
 
   Future<void> restoreBackup(File backup) async {
@@ -279,7 +282,8 @@ class BackupService {
   Future<String?> get connectedGoogleAccount async =>
       (await _googleSignIn.signInSilently())?.email;
 
-  Future<void> uploadToGoogleDrive(File backup, {required int keepLast}) async {
+  Future<T> _withDrive<T>(
+      Future<T> Function(DriveBackupStore store) action) async {
     final account = await _googleSignIn.signInSilently();
     if (account == null) {
       throw StateError('Reconnect Google Drive from Backup & Restore.');
@@ -287,26 +291,28 @@ class BackupService {
     final client = await _googleSignIn.authenticatedClient();
     if (client == null) throw StateError('Could not authorize Google Drive.');
     try {
-      final api = drive.DriveApi(client);
-      await api.files.create(
-        drive.File()
-          ..name = p.basename(backup.path)
-          ..parents = ['appDataFolder']
-          ..appProperties = {'ledgerBackup': 'true'},
-        uploadMedia: drive.Media(backup.openRead(), await backup.length()),
-      );
-      final remote = await api.files.list(
-        spaces: 'appDataFolder',
-        q: "trashed = false and appProperties has { key='ledgerBackup' and value='true' }",
-        orderBy: 'createdTime desc',
-        pageSize: 100,
-        $fields: 'files(id,name,createdTime)',
-      );
-      for (final old in (remote.files ?? []).skip(keepLast)) {
-        if (old.id != null) await api.files.delete(old.id!);
-      }
+      return await action(DriveBackupStore(drive.DriveApi(client)));
     } finally {
       client.close();
+    }
+  }
+
+  Future<void> uploadToGoogleDrive(File backup, {required int keepLast}) =>
+      _withDrive((store) => store.upload(backup, keepLast: keepLast));
+
+  Future<List<drive.File>> listGoogleDriveBackups() =>
+      _withDrive((store) => store.list());
+
+  /// The caller owns the temporary directory and must remove it after restore.
+  Future<File> downloadGoogleDriveBackup(String id) async {
+    final temp = await Directory.systemTemp.createTemp('ledger-drive-');
+    final target = File(p.join(temp.path, 'backup.zip'));
+    try {
+      await _withDrive((store) => store.download(id, target));
+      return target;
+    } catch (_) {
+      await temp.delete(recursive: true);
+      rethrow;
     }
   }
 

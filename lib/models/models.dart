@@ -4,10 +4,8 @@ import 'dart:convert';
 
 enum Frequency { weekly, monthly, quarterly, yearly, custom }
 
-Frequency frequencyFromString(String s) => Frequency.values.firstWhere(
-      (f) => f.name == s,
-      orElse: () => Frequency.monthly,
-    );
+Frequency frequencyFromString(String s) => Frequency.values
+    .firstWhere((f) => f.name == s, orElse: () => Frequency.monthly);
 
 enum EndType { never, count, date }
 
@@ -54,11 +52,10 @@ class InvoiceItem {
   final double quantity;
   final double unitPrice;
 
-  InvoiceItem({
-    required this.description,
-    required this.quantity,
-    required this.unitPrice,
-  });
+  InvoiceItem(
+      {required this.description,
+      required this.quantity,
+      required this.unitPrice});
 
   double get lineTotal => quantity * unitPrice;
 
@@ -96,13 +93,12 @@ class Client {
 
   Client({this.id, required this.name, this.email, this.phone, this.address});
 
-  Client copyWith({
-    int? id,
-    String? name,
-    String? email,
-    String? phone,
-    String? address,
-  }) =>
+  Client copyWith(
+          {int? id,
+          String? name,
+          String? email,
+          String? phone,
+          String? address}) =>
       Client(
         id: id ?? this.id,
         name: name ?? this.name,
@@ -128,28 +124,12 @@ class Client {
       );
 }
 
-/// Result of a generation pass over due invoices and expenses.
-class GenerationRunResult {
-  final int invoicesGenerated;
-  final int expensesGenerated;
-
-  const GenerationRunResult({
-    this.invoicesGenerated = 0,
-    this.expensesGenerated = 0,
-  });
-
-  int get total => invoicesGenerated + expensesGenerated;
-}
-
 /// ---------- Recurring template ----------
 
 class RecurringTemplate {
   final int? id;
-  final int? clientId;
+  final int clientId;
   final String? clientName;
-  final String? clientEmail;
-  final String? clientPhone;
-  final String? clientAddress;
   final List<InvoiceItem> items;
   final double taxRate;
   final Frequency frequency;
@@ -165,11 +145,8 @@ class RecurringTemplate {
 
   RecurringTemplate({
     this.id,
-    this.clientId,
+    required this.clientId,
     this.clientName,
-    this.clientEmail,
-    this.clientPhone,
-    this.clientAddress,
     required this.items,
     this.taxRate = 0,
     required this.frequency,
@@ -187,18 +164,10 @@ class RecurringTemplate {
   double get subtotal => items.fold(0.0, (s, i) => s + i.lineTotal);
   double get total => subtotal * (1 + taxRate / 100);
 
-  String get displayName {
-    final name = clientName?.trim();
-    return (name != null && name.isNotEmpty) ? name : 'Walk-in client';
-  }
-
   RecurringTemplate withId(int newId) => RecurringTemplate(
         id: newId,
         clientId: clientId,
         clientName: clientName,
-        clientEmail: clientEmail,
-        clientPhone: clientPhone,
-        clientAddress: clientAddress,
         items: items,
         taxRate: taxRate,
         frequency: frequency,
@@ -222,9 +191,6 @@ class RecurringTemplate {
         id: id,
         clientId: clientId,
         clientName: clientName,
-        clientEmail: clientEmail,
-        clientPhone: clientPhone,
-        clientAddress: clientAddress,
         items: items,
         taxRate: taxRate,
         frequency: frequency,
@@ -242,10 +208,6 @@ class RecurringTemplate {
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,
         'client_id': clientId,
-        'client_name': clientName ?? '',
-        'client_email': clientEmail,
-        'client_phone': clientPhone,
-        'client_address': clientAddress,
         'items_json': InvoiceItem.encodeList(items),
         'tax_rate': taxRate,
         'frequency': frequency.name,
@@ -263,15 +225,8 @@ class RecurringTemplate {
   factory RecurringTemplate.fromMap(Map<String, dynamic> map) =>
       RecurringTemplate(
         id: map['id'] as int?,
-        clientId: map['client_id'] as int?,
-        clientName: (map['joined_client_name'] as String?) ??
-            map['client_name'] as String?,
-        clientEmail: (map['joined_client_email'] as String?) ??
-            map['client_email'] as String?,
-        clientPhone: (map['joined_client_phone'] as String?) ??
-            map['client_phone'] as String?,
-        clientAddress: (map['joined_client_address'] as String?) ??
-            map['client_address'] as String?,
+        clientId: map['client_id'] as int,
+        clientName: map['client_name'] as String?,
         items: InvoiceItem.decodeList(map['items_json'] as String),
         taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0,
         frequency: frequencyFromString(map['frequency'] as String),
@@ -495,7 +450,11 @@ class ExpenseHead {
   final String name;
   final int sortOrder;
 
-  const ExpenseHead({this.id, required this.name, this.sortOrder = 0});
+  const ExpenseHead({
+    this.id,
+    required this.name,
+    this.sortOrder = 0,
+  });
 
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,
@@ -512,7 +471,6 @@ class ExpenseHead {
 
 class ExpenseRecord {
   final int? id;
-  final int? templateId;
   final int headId;
   final String? headName;
   final double amount;
@@ -521,7 +479,6 @@ class ExpenseRecord {
 
   const ExpenseRecord({
     this.id,
-    this.templateId,
     required this.headId,
     this.headName,
     required this.amount,
@@ -529,28 +486,8 @@ class ExpenseRecord {
     this.notes,
   });
 
-  ExpenseRecord copyWith({
-    int? id,
-    int? templateId,
-    int? headId,
-    String? headName,
-    double? amount,
-    String? expenseDate,
-    String? notes,
-  }) =>
-      ExpenseRecord(
-        id: id ?? this.id,
-        templateId: templateId ?? this.templateId,
-        headId: headId ?? this.headId,
-        headName: headName ?? this.headName,
-        amount: amount ?? this.amount,
-        expenseDate: expenseDate ?? this.expenseDate,
-        notes: notes ?? this.notes,
-      );
-
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,
-        'template_id': templateId,
         'head_id': headId,
         'amount': amount,
         'expense_date': expenseDate,
@@ -559,120 +496,11 @@ class ExpenseRecord {
 
   factory ExpenseRecord.fromMap(Map<String, dynamic> map) => ExpenseRecord(
         id: map['id'] as int?,
-        templateId: map['template_id'] as int?,
         headId: map['head_id'] as int,
         headName: map['head_name'] as String?,
         amount: (map['amount'] as num).toDouble(),
         expenseDate: map['expense_date'] as String,
         notes: map['notes'] as String?,
-      );
-}
-
-/// Recurring expense schedule that generates [ExpenseRecord]s on due dates.
-class RecurringExpense {
-  final int? id;
-  final int headId;
-  final String? headName;
-  final double amount;
-  final String? notes;
-  final Frequency frequency;
-  final int? intervalDays;
-  final String startDate;
-  final String nextDueDate;
-  final EndType endType;
-  final String? endValue;
-  final int occurrencesGenerated;
-  final TemplateStatus status;
-
-  const RecurringExpense({
-    this.id,
-    required this.headId,
-    this.headName,
-    required this.amount,
-    this.notes,
-    required this.frequency,
-    this.intervalDays,
-    required this.startDate,
-    required this.nextDueDate,
-    this.endType = EndType.never,
-    this.endValue,
-    this.occurrencesGenerated = 0,
-    this.status = TemplateStatus.active,
-  });
-
-  String get displayName {
-    final note = notes?.trim();
-    if (note != null && note.isNotEmpty) return note;
-    return headName ?? 'Expense';
-  }
-
-  RecurringExpense withId(int newId) => RecurringExpense(
-        id: newId,
-        headId: headId,
-        headName: headName,
-        amount: amount,
-        notes: notes,
-        frequency: frequency,
-        intervalDays: intervalDays,
-        startDate: startDate,
-        nextDueDate: nextDueDate,
-        endType: endType,
-        endValue: endValue,
-        occurrencesGenerated: occurrencesGenerated,
-        status: status,
-      );
-
-  RecurringExpense copyWith({
-    String? nextDueDate,
-    int? occurrencesGenerated,
-    TemplateStatus? status,
-  }) =>
-      RecurringExpense(
-        id: id,
-        headId: headId,
-        headName: headName,
-        amount: amount,
-        notes: notes,
-        frequency: frequency,
-        intervalDays: intervalDays,
-        startDate: startDate,
-        nextDueDate: nextDueDate ?? this.nextDueDate,
-        endType: endType,
-        endValue: endValue,
-        occurrencesGenerated: occurrencesGenerated ?? this.occurrencesGenerated,
-        status: status ?? this.status,
-      );
-
-  Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'head_id': headId,
-        'amount': amount,
-        'notes': notes,
-        'frequency': frequency.name,
-        'interval_days': intervalDays,
-        'start_date': startDate,
-        'next_due_date': nextDueDate,
-        'end_type': endType.name,
-        'end_value': endValue,
-        'occurrences_generated': occurrencesGenerated,
-        'status': status.name,
-      };
-
-  factory RecurringExpense.fromMap(Map<String, dynamic> map) =>
-      RecurringExpense(
-        id: map['id'] as int?,
-        headId: map['head_id'] as int,
-        headName: map['head_name'] as String?,
-        amount: (map['amount'] as num).toDouble(),
-        notes: map['notes'] as String?,
-        frequency: frequencyFromString(map['frequency'] as String),
-        intervalDays: map['interval_days'] as int?,
-        startDate: map['start_date'] as String,
-        nextDueDate: map['next_due_date'] as String,
-        endType: endTypeFromString(map['end_type'] as String? ?? 'never'),
-        endValue: map['end_value'] as String?,
-        occurrencesGenerated: map['occurrences_generated'] as int? ?? 0,
-        status: templateStatusFromString(map['status'] as String? ?? 'active'),
       );
 }
 
@@ -696,27 +524,6 @@ class CashReceipt {
     this.invoiceId,
     this.invoiceNumber,
   });
-
-  bool get isStandalone => invoiceId == null;
-
-  CashReceipt copyWith({
-    int? id,
-    double? amount,
-    String? receiptDate,
-    String? receivedFrom,
-    String? notes,
-    int? invoiceId,
-    String? invoiceNumber,
-  }) =>
-      CashReceipt(
-        id: id ?? this.id,
-        amount: amount ?? this.amount,
-        receiptDate: receiptDate ?? this.receiptDate,
-        receivedFrom: receivedFrom ?? this.receivedFrom,
-        notes: notes ?? this.notes,
-        invoiceId: invoiceId ?? this.invoiceId,
-        invoiceNumber: invoiceNumber ?? this.invoiceNumber,
-      );
 
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,
@@ -805,12 +612,11 @@ class AppNotification {
   final String createdAt;
   final bool isRead;
 
-  AppNotification({
-    this.id,
-    required this.message,
-    required this.createdAt,
-    this.isRead = false,
-  });
+  AppNotification(
+      {this.id,
+      required this.message,
+      required this.createdAt,
+      this.isRead = false});
 
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,

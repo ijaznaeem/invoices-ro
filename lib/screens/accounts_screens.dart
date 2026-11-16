@@ -8,8 +8,6 @@ import '../util/date_utils.dart';
 import '../widgets/ledger_row.dart';
 import '../widgets/searchable_dropdown.dart';
 import '../widgets/status_pill.dart';
-import 'money_sheets.dart';
-import 'recurring_expenses_screen.dart';
 
 class AccountsLedgerScreen extends StatefulWidget {
   const AccountsLedgerScreen({super.key});
@@ -176,7 +174,9 @@ class _AccountsLedgerScreenState extends State<AccountsLedgerScreen> {
                       trailingFigure: e.debit > 0
                           ? 'Dr ${money(e.debit)}'
                           : 'Cr ${money(e.credit)}',
-                      tick: e.debit > 0 ? LedgerTick.pending : LedgerTick.paid,
+                      tick: e.debit > 0
+                          ? LedgerTick.pending
+                          : LedgerTick.paid,
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -416,8 +416,10 @@ class _CashReportScreenState extends State<CashReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final receiptTotal = _receipts.fold<double>(0, (s, r) => s + r.amount);
-    final expenseTotal = _expenses.fold<double>(0, (s, e) => s + e.amount);
+    final receiptTotal =
+        _receipts.fold<double>(0, (s, r) => s + r.amount);
+    final expenseTotal =
+        _expenses.fold<double>(0, (s, e) => s + e.amount);
     final net = receiptTotal - expenseTotal;
 
     // Group expenses by head for the summary
@@ -622,8 +624,10 @@ class _CashSummaryTile extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style:
-                Theme.of(context).textTheme.titleLarge?.copyWith(color: color),
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(color: color),
           ),
         ],
       ),
@@ -641,7 +645,7 @@ class CashReceiptsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Cash receipts')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showIncomeSheet(context),
+        onPressed: () => _showAddReceipt(context),
         icon: const Icon(Icons.add),
         label: const Text('Add receipt'),
       ),
@@ -689,15 +693,110 @@ class CashReceiptsScreen extends StatelessWidget {
                               ? ' · ${receipt.notes}'
                               : ''),
                       trailingFigure: money(receipt.amount),
-                      onTap: receipt.isStandalone
-                          ? () => showIncomeSheet(context, existing: receipt)
-                          : null,
                     );
                   },
                 ),
         ),
       ),
     );
+  }
+
+  Future<void> _showAddReceipt(BuildContext context) async {
+    final state = AppStateScope.of(context);
+    final fromController = TextEditingController();
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+    var date = DateTime.now();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(builder: (sheetContext, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('New cash receipt',
+                    style: Theme.of(sheetContext).textTheme.titleLarge),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: fromController,
+                  decoration: const InputDecoration(labelText: 'Received from'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: amountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: sheetContext,
+                      initialDate: date,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) setSheetState(() => date = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Date'),
+                    child: Text(
+                        formatDate(date.toIso8601String().substring(0, 10))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: notesController,
+                  decoration:
+                      const InputDecoration(labelText: 'Notes (optional)'),
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () async {
+                    final amount =
+                        double.tryParse(amountController.text.trim()) ?? 0;
+                    if (fromController.text.trim().isEmpty || amount <= 0) {
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        const SnackBar(
+                            content: Text('Enter recipient and a valid amount.')),
+                      );
+                      return;
+                    }
+                    await state.addCashReceipt(CashReceipt(
+                      amount: amount,
+                      receiptDate: date.toIso8601String().substring(0, 10),
+                      receivedFrom: fromController.text.trim(),
+                      notes: notesController.text.trim().isEmpty
+                          ? null
+                          : notesController.text.trim(),
+                    ));
+                    if (sheetContext.mounted) Navigator.pop(sheetContext);
+                  },
+                  child: const Text('Save receipt'),
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    ).whenComplete(() {
+      fromController.dispose();
+      amountController.dispose();
+      notesController.dispose();
+    });
   }
 }
 
@@ -713,15 +812,6 @@ class ExpensesScreen extends StatelessWidget {
         title: const Text('Expenses'),
         actions: [
           IconButton(
-            tooltip: 'Recurring expenses',
-            icon: const Icon(Icons.autorenew_rounded),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => const RecurringExpensesScreen()),
-            ),
-          ),
-          IconButton(
             tooltip: 'Manage heads',
             icon: const Icon(Icons.category_outlined),
             onPressed: () => Navigator.push(
@@ -732,7 +822,7 @@ class ExpensesScreen extends StatelessWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showExpenseSheet(context),
+        onPressed: () => _showAddExpense(context),
         icon: const Icon(Icons.add),
         label: const Text('Add expense'),
       ),
@@ -746,7 +836,7 @@ class ExpensesScreen extends StatelessWidget {
                     EmptyState(
                       title: 'No expenses recorded',
                       subtitle:
-                          'Track one-off spending, or tap the cycle icon to set up rent and other recurring costs.',
+                          'Track spending by head (Office, Travel, Utilities, …).',
                       icon: Icons.money_off_csred_outlined,
                     ),
                   ],
@@ -773,21 +863,130 @@ class ExpensesScreen extends StatelessWidget {
                     final expense = state.expenses[index - 1];
                     return LedgerRow(
                       tick: LedgerTick.overdue,
-                      overline: expense.templateId != null
-                          ? '${expense.headName ?? 'Expense'} · Recurring'
-                          : expense.headName ?? 'Expense',
+                      overline: expense.headName ?? 'Expense',
                       title: expense.notes?.trim().isNotEmpty == true
                           ? expense.notes!
                           : expense.headName ?? 'Expense',
                       subtitle: formatDate(expense.expenseDate),
                       trailingFigure: money(expense.amount),
-                      onTap: () => showExpenseSheet(context, existing: expense),
                     );
                   },
                 ),
         ),
       ),
     );
+  }
+
+  Future<void> _showAddExpense(BuildContext context) async {
+    final state = AppStateScope.of(context);
+    if (state.expenseHeads.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add expense heads in Settings first.')),
+      );
+      return;
+    }
+    var headId = state.expenseHeads.first.id!;
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+    var date = DateTime.now();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(builder: (sheetContext, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('New expense',
+                    style: Theme.of(sheetContext).textTheme.titleLarge),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: headId,
+                  decoration: const InputDecoration(labelText: 'Expense head'),
+                  items: state.expenseHeads
+                      .map((h) => DropdownMenuItem(
+                            value: h.id,
+                            child: Text(h.name),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setSheetState(() => headId = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: amountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: sheetContext,
+                      initialDate: date,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) setSheetState(() => date = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Date'),
+                    child: Text(
+                        formatDate(date.toIso8601String().substring(0, 10))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: notesController,
+                  decoration:
+                      const InputDecoration(labelText: 'Notes (optional)'),
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () async {
+                    final amount =
+                        double.tryParse(amountController.text.trim()) ?? 0;
+                    if (amount <= 0) {
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        const SnackBar(
+                            content: Text('Enter a valid expense amount.')),
+                      );
+                      return;
+                    }
+                    await state.addExpense(ExpenseRecord(
+                      headId: headId,
+                      amount: amount,
+                      expenseDate: date.toIso8601String().substring(0, 10),
+                      notes: notesController.text.trim().isEmpty
+                          ? null
+                          : notesController.text.trim(),
+                    ));
+                    if (sheetContext.mounted) Navigator.pop(sheetContext);
+                  },
+                  child: const Text('Save expense'),
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    ).whenComplete(() {
+      amountController.dispose();
+      notesController.dispose();
+    });
   }
 }
 
