@@ -124,7 +124,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppTheme.screenBar('Settings'),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
         child: SafeArea(
@@ -436,7 +436,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: const Icon(Icons.image_outlined, size: 32),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.asset(
+          'assets/icons/ledger_app_icon.png',
+          width: 72,
+          height: 72,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.image_outlined, size: 32),
+        ),
+      ),
     );
   }
 

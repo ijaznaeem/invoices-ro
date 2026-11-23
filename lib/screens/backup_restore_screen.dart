@@ -23,6 +23,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   BackupPreferences _preferences = const BackupPreferences();
   List<File> _backups = [];
   String? _googleAccount;
+  bool _driveNeedsReconnect = false;
   List<drive.File> _driveBackups = [];
   String? _driveError;
   bool _driveLoaded = false;
@@ -50,8 +51,17 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       _customDaysController.text = '${_preferences.customDays}';
       _keepLastController.text = '${_preferences.keepLast}';
       try {
-        _googleAccount = await _service.connectedGoogleAccount;
+        _googleAccount = await _service.savedDriveEmail;
+        if (_preferences.uploadToDrive) {
+          final restored = await _service.restoreGoogleDrive();
+          _driveNeedsReconnect = restored == null;
+          _googleAccount = restored?.email ?? _googleAccount;
+          if (restored != null && mounted) {
+            await _refreshDriveBackups();
+          }
+        }
       } catch (error) {
+        _driveNeedsReconnect = _preferences.uploadToDrive;
         _driveError = 'Google Drive connection failed: $error';
       }
     } catch (error) {
@@ -171,11 +181,13 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         } else {
           await _service.disconnectGoogleDrive();
           _googleAccount = null;
+          _driveNeedsReconnect = false;
           _driveBackups = [];
           _driveError = null;
           _driveLoaded = false;
         }
         _preferences = _preferences.copyWith(uploadToDrive: enabled);
+        _driveNeedsReconnect = false;
         await _service.savePreferences(_preferences);
         if (enabled) await _refreshDriveBackups();
       });
@@ -243,7 +255,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Backup & Restore')),
+      appBar: AppTheme.screenBar('Backup & Restore'),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
         child: _loading
@@ -332,7 +344,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                               'Backups are stored privately in your Google account. '
                               'Restore them here after reinstalling. Scheduled backups run when the app opens or resumes.'),
                         ),
-                        if (_googleAccount == null &&
+                        if (_driveNeedsReconnect &&
                             _preferences.uploadToDrive)
                           TextButton(
                             onPressed:

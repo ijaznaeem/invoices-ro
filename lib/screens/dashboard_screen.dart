@@ -6,7 +6,9 @@ import '../state/app_state_scope.dart';
 import '../theme/app_theme.dart';
 import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
+import '../widgets/ledger_fab.dart';
 import '../widgets/ledger_row.dart';
+import 'invoice_edit_screen.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/status_pill.dart';
 
@@ -18,7 +20,17 @@ class DashboardScreen extends StatelessWidget {
     final state = AppStateScope.of(context);
     final netCash = state.cashReceivedTotal - state.expensesTotalAmount;
 
-    return RefreshIndicator(
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: LedgerFab(
+        label: 'New invoice',
+        icon: Icons.add_rounded,
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const InvoiceEditScreen()),
+        ),
+      ),
+      body: RefreshIndicator(
       onRefresh: () async {
         await Future.wait([
           state.reloadDashboard(),
@@ -28,7 +40,7 @@ class DashboardScreen extends StatelessWidget {
         ]);
       },
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
         children: [
           Text(
             'Today is ${formatDate(todayStr())}',
@@ -48,21 +60,35 @@ class DashboardScreen extends StatelessWidget {
             crossAxisSpacing: 10,
             childAspectRatio: 1.55,
             children: [
-              StatCard(label: 'Outstanding', value: money(state.outstanding)),
               StatCard(
-                  label: 'Cash received',
-                  value: money(state.cashReceivedTotal),
-                  valueColor: LedgerColors.paid),
+                label: 'Outstanding',
+                value: money(state.outstanding),
+                icon: Icons.account_balance_wallet_rounded,
+                filled: true,
+              ),
               StatCard(
-                  label: 'Expenses',
-                  value: money(state.expensesTotalAmount),
-                  valueColor: LedgerColors.overdue),
+                label: 'Cash received',
+                value: money(state.cashReceivedTotal),
+                valueColor: LedgerColors.teal,
+                icon: Icons.south_west_rounded,
+                filled: true,
+              ),
               StatCard(
-                  label: 'Net cash',
-                  value: money(netCash),
-                  valueColor: netCash >= 0
-                      ? LedgerColors.secondary
-                      : LedgerColors.overdue),
+                label: 'Expenses',
+                value: money(state.expensesTotalAmount),
+                valueColor: LedgerColors.accent,
+                icon: Icons.north_east_rounded,
+                filled: true,
+              ),
+              StatCard(
+                label: 'Net cash',
+                value: money(netCash),
+                valueColor: netCash >= 0
+                    ? LedgerColors.amber
+                    : LedgerColors.accent,
+                icon: Icons.pie_chart_rounded,
+                filled: true,
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -75,13 +101,19 @@ class DashboardScreen extends StatelessWidget {
             childAspectRatio: 2.1,
             children: [
               StatCard(
-                  label: 'Overdue',
-                  value: '${state.overdueCount}',
-                  valueColor: LedgerColors.overdue),
+                label: 'Overdue',
+                value: '${state.overdueCount}',
+                valueColor: LedgerColors.accent,
+                icon: Icons.priority_high_rounded,
+                filled: true,
+              ),
               StatCard(
-                  label: 'Due this week',
-                  value: '${state.dueThisWeek}',
-                  valueColor: LedgerColors.brass),
+                label: 'Due this week',
+                value: '${state.dueThisWeek}',
+                valueColor: LedgerColors.amber,
+                icon: Icons.event_rounded,
+                filled: true,
+              ),
             ],
           ),
           const SizedBox(height: 18),
@@ -128,6 +160,7 @@ class DashboardScreen extends StatelessWidget {
                     title: 'Nothing scheduled',
                     subtitle: 'Create a recurring invoice to see it here.',
                     icon: Icons.event_available_outlined,
+                    embedded: true,
                   )
                 : Column(
                     children: state.upcoming
@@ -147,6 +180,7 @@ class DashboardScreen extends StatelessWidget {
                     title: 'No activity yet',
                     subtitle: 'Generated invoices and payments show up here.',
                     icon: Icons.notifications_none,
+                    embedded: true,
                   )
                 : Column(
                     children: state.notifications
@@ -162,6 +196,7 @@ class DashboardScreen extends StatelessWidget {
                   ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -309,7 +344,7 @@ class _StatusPieChart extends StatelessWidget {
       if (partial > 0)
         PieChartSectionData(
           value: partial.toDouble(),
-          color: const Color(0xFF3B82F6),
+          color: LedgerColors.sky,
           title: '$partial',
           radius: 52,
           titleStyle: const TextStyle(
@@ -362,7 +397,7 @@ class _StatusPieChart extends StatelessWidget {
           children: const [
             _LegendDot(color: LedgerColors.brass, label: 'Pending'),
             SizedBox(height: 6),
-            _LegendDot(color: Color(0xFF3B82F6), label: 'Partial'),
+            _LegendDot(color: LedgerColors.sky, label: 'Partial'),
             SizedBox(height: 6),
             _LegendDot(color: LedgerColors.overdue, label: 'Overdue'),
             SizedBox(height: 6),
@@ -466,36 +501,15 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
+    return Container(
+      decoration: AppTheme.cardDecoration(context),
       clipBehavior: Clip.antiAlias,
-      elevation: 2,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
-            decoration: BoxDecoration(
-              color: LedgerColors.primary.withValues(alpha: 0.06),
-              border: const Border(
-                bottom: BorderSide(color: LedgerColors.border),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: LedgerColors.primary,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const SizedBox(width: 9),
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
-              ],
-            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
           ),
           child,
         ],

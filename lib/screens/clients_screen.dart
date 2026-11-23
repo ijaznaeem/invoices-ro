@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/models.dart';
 import '../state/app_state_scope.dart';
+import '../theme/app_theme.dart';
+import '../widgets/ledger_fab.dart';
 import '../widgets/ledger_row.dart';
 import '../widgets/status_pill.dart';
 
@@ -17,15 +19,10 @@ class ClientsScreen extends StatelessWidget {
       body: RefreshIndicator(
         onRefresh: () => state.reloadClients(),
         child: state.clients.isEmpty
-            ? ListView(
-                padding: const EdgeInsets.symmetric(vertical: 60),
-                children: const [
-                  EmptyState(
-                    title: 'No clients yet',
-                    subtitle: 'Add a client to start billing them.',
-                    icon: Icons.people_outline,
-                  ),
-                ],
+            ? EmptyState.fill(
+                title: 'No clients yet',
+                subtitle: 'Add a client to start billing them.',
+                icon: Icons.people_outline,
               )
             : ListView.builder(
                 padding: const EdgeInsets.only(bottom: 90, top: 4),
@@ -36,7 +33,12 @@ class ClientsScreen extends StatelessWidget {
                     key: ValueKey(c.id),
                     direction: DismissDirection.endToStart,
                     background: Container(
-                      color: Colors.red.shade400,
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: LedgerColors.overdue,
+                        borderRadius: BorderRadius.circular(22),
+                      ),
                       alignment: Alignment.centerRight,
                       padding: const EdgeInsets.only(right: 20),
                       child:
@@ -70,11 +72,10 @@ class ClientsScreen extends StatelessWidget {
                 },
               ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'clients_fab',
+      floatingActionButton: LedgerFab(
+        label: 'New client',
+        icon: Icons.person_add_alt_1_rounded,
         onPressed: () => _showClientSheet(context),
-        icon: const Icon(Icons.add),
-        label: const Text('New client'),
       ),
     );
   }
@@ -91,24 +92,58 @@ class ClientsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) => Padding(
         padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
         ),
-        child: Form(
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            color: LedgerColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Form(
           key: formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(isEditing ? 'Edit client' : 'New client',
-                  style: Theme.of(sheetContext).textTheme.titleLarge),
-              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                decoration: const BoxDecoration(
+                  color: LedgerColors.primary,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.person_add_alt_1_rounded,
+                          color: Colors.white),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        isEditing ? 'Edit client' : 'New client',
+                        style: Theme.of(sheetContext)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
               TextFormField(
                 controller: nameCtrl,
                 decoration: const InputDecoration(labelText: 'Name'),
@@ -157,8 +192,12 @@ class ClientsScreen extends StatelessWidget {
                 },
                 child: Text(isEditing ? 'Save changes' : 'Add client'),
               ),
+                  ],
+                ),
+              ),
             ],
           ),
+        ),
         ),
       ),
     ).whenComplete(() {

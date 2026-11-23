@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/models.dart';
+import '../theme/app_theme.dart';
 import '../services/public_file_service.dart';
 import '../util/invoice_pdf.dart';
 
@@ -77,8 +78,8 @@ class _InvoicePdfPreviewScreenState extends State<InvoicePdfPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('PDF Preview - ${widget.invoice.invoiceNumber}'),
+      appBar: AppTheme.screenBar(
+        'PDF · ${widget.invoice.invoiceNumber}',
         actions: [
           PopupMenuButton<String>(
             tooltip: 'Download invoice',

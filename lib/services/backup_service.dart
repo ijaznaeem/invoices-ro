@@ -63,11 +63,17 @@ class BackupService {
   static const _customDaysKey = 'backup_custom_days';
   static const _keepLastKey = 'backup_keep_last';
   static const _driveKey = 'backup_upload_drive';
+  static const _driveEmailKey = 'backup_drive_email';
   static const _lastBackupKey = 'backup_last_at';
   static const _driveScope = drive.DriveApi.driveAppdataScope;
+  static const _iosClientId =
+      '788321164761-h6e8rp04jli0414uhtuvoqbcoi550lqp.apps.googleusercontent.com';
 
   final DatabaseHelper _db = DatabaseHelper.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: [_driveScope]);
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: Platform.isIOS ? _iosClientId : null,
+    scopes: [_driveScope],
+  );
   String? lastCloudError;
 
   Future<Directory> get backupDirectory async {
@@ -162,10 +168,13 @@ class BackupService {
       await output.writeAsBytes(ZipEncoder().encode(archive), flush: true);
       // Keep an additional user-owned copy outside the app sandbox. Android
       // does not remove this Documents/Ledger Backups copy on uninstall.
-      await PublicFileService.saveBackupToDocuments(
-        fileName: p.basename(output.path),
-        bytes: await output.readAsBytes(),
-      );
+      // iOS already stores the backup in the app Documents folder.
+      if (Platform.isAndroid) {
+        await PublicFileService.saveBackupToDocuments(
+          fileName: p.basename(output.path),
+          bytes: await output.readAsBytes(),
+        );
+      }
       await _markBackupComplete(now);
       await _pruneLocal(config.keepLast);
       if (config.uploadToDrive) {
@@ -262,6 +271,7 @@ class BackupService {
       if (account == null) {
         throw StateError('Google Drive sign-in was cancelled.');
       }
+      await _rememberDrive(true, email: account.email);
       return account.email;
     } on PlatformException catch (error) {
       final details = '${error.message ?? ''} ${error.details ?? ''}';
@@ -277,16 +287,58 @@ class BackupService {
     }
   }
 
-  Future<void> disconnectGoogleDrive() => _googleSignIn.disconnect();
+  Future<void> disconnectGoogleDrive() async {
+    await _googleSignIn.disconnect();
+    await _rememberDrive(false);
+  }
 
-  Future<String?> get connectedGoogleAccount async =>
-      (await _googleSignIn.signInSilently())?.email;
+  /// Email saved with the Drive switch, even before the session is restored.
+  Future<String?> get savedDriveEmail async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_driveKey) != true) return null;
+    final email = prefs.getString(_driveEmailKey);
+    if (email == null || email.trim().isEmpty) return null;
+    return email;
+  }
+
+  /// Restores the previous Google session without showing the sign-in sheet.
+  Future<GoogleSignInAccount?> restoreGoogleDrive() async {
+    final current = _googleSignIn.currentUser;
+    if (current != null) return current;
+    return _googleSignIn.signInSilently(reAuthenticate: true);
+  }
+
+  Future<String?> get connectedGoogleAccount async {
+    final account = await restoreGoogleDrive();
+    if (account == null) return savedDriveEmail;
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_driveKey) == true) {
+      await prefs.setString(_driveEmailKey, account.email);
+    }
+    return account.email;
+  }
+
+  Future<void> _rememberDrive(bool enabled, {String? email}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_driveKey, enabled);
+    if (!enabled) {
+      await prefs.remove(_driveEmailKey);
+      return;
+    }
+    if (email != null && email.trim().isNotEmpty) {
+      await prefs.setString(_driveEmailKey, email.trim());
+    }
+  }
 
   Future<T> _withDrive<T>(
       Future<T> Function(DriveBackupStore store) action) async {
-    final account = await _googleSignIn.signInSilently();
+    final account = await restoreGoogleDrive();
     if (account == null) {
       throw StateError('Reconnect Google Drive from Backup & Restore.');
+    }
+    final granted = await _googleSignIn.requestScopes([_driveScope]);
+    if (!granted) {
+      throw StateError('Google Drive permission is required for backups.');
     }
     final client = await _googleSignIn.authenticatedClient();
     if (client == null) throw StateError('Could not authorize Google Drive.');

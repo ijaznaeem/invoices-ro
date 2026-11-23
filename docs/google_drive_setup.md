@@ -1,4 +1,4 @@
-# Google Drive backups (Android)
+# Google Drive backups (Android and iOS)
 
 The app uses `google_sign_in` 6.2.2 and Drive API v3. Backups contain the
 SQLite database and business logo. They live in Google's private `appDataFolder`,
@@ -52,6 +52,11 @@ For this Android integration and the pinned plugin version, no Firebase project,
 Android OAuth client identifies the application using package and signing SHA-1.
 Do not embed a client secret in the app.
 
+6. In the same Cloud project, create an **iOS** OAuth client with bundle ID
+   `com.octavions.invoicesRo`. Copy `CLIENT_ID` into `GIDClientID` and
+   `REVERSED_CLIENT_ID` into `CFBundleURLTypes` in `ios/Runner/Info.plist`.
+   Do not add `GoogleService-Info.plist` to the Flutter project.
+
 ## 2. Build and test on Android
 
 ```powershell
@@ -85,8 +90,7 @@ delete your existing Drive archives.
 - **Reconnect requested:** use **Reconnect Google Drive** and authorize again.
 - **No archives after reinstall:** check the Google account, package and Cloud
   project. Archives are private to that application, not ordinary My Drive files.
-- **Windows or web:** this project currently targets Android for Drive backup;
-  this change does not configure OAuth or database support for other platforms.
+- **Windows or web:** Drive backup is configured for Android and iOS only.
 
 ## References
 

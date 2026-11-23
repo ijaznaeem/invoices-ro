@@ -231,11 +231,9 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
     final rates = state.taxRates;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_existing == null
-            ? 'New invoice'
-            : 'Edit ${_existing!.invoiceNumber}'),
-      ),
+      appBar: AppTheme.screenBar(_existing == null
+          ? 'New invoice'
+          : 'Edit ${_existing!.invoiceNumber}'),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
         child: Form(
@@ -542,6 +540,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
   Widget _sectionLabel(String text) => Text(
         text,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: LedgerColors.primary,
               letterSpacing: 0.8,
               fontWeight: FontWeight.w700,
             ),
@@ -581,7 +580,10 @@ class _TotalsCard extends StatelessWidget {
   Widget _row(BuildContext context, String label, String value,
       {bool emphasize = false}) {
     final style = emphasize
-        ? Theme.of(context).textTheme.titleMedium
+        ? Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(color: LedgerColors.primary)
         : Theme.of(context).textTheme.bodyMedium;
     return Row(
       children: [

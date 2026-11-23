@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../state/app_state_scope.dart';
 import '../theme/app_theme.dart';
+import '../widgets/ledger_fab.dart';
 import '../widgets/status_pill.dart';
 
 /// Standalone screen for managing the list of invoice payment options.
@@ -15,7 +16,7 @@ class PaymentOptionsScreen extends StatelessWidget {
     final options = AppStateScope.of(context).paymentOptions;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Payment Options')),
+      appBar: AppTheme.screenBar('Payment options'),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
         child: options.isEmpty
@@ -28,11 +29,10 @@ class PaymentOptionsScreen extends StatelessWidget {
                     _PaymentOptionCard(option: options[i]),
               ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'payment_options_fab',
+      floatingActionButton: LedgerFab(
+        label: 'Add payment option',
+        icon: Icons.payment_rounded,
         onPressed: () => _showDialog(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Option'),
       ),
     );
   }

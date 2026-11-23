@@ -15,6 +15,7 @@ import 'screens/templates_screen.dart';
 import 'state/app_state.dart';
 import 'state/app_state_scope.dart';
 import 'theme/app_theme.dart';
+import 'widgets/ledger_glass_background.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -144,7 +145,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   child: Container(
                     padding: const EdgeInsets.all(3),
                     decoration: const BoxDecoration(
-                        color: Colors.redAccent, shape: BoxShape.circle),
+                        color: LedgerColors.accent, shape: BoxShape.circle),
                     constraints:
                         const BoxConstraints(minWidth: 14, minHeight: 14),
                     child: Text(
@@ -168,31 +169,50 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         },
         onToggleTheme: widget.onToggleTheme,
       ),
-      body: DecoratedBox(
-        decoration: AppTheme.backgroundDecoration(context),
-        child: IndexedStack(index: _index, children: _screens),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const LedgerGlassBackground(),
+          IndexedStack(index: _index, children: _screens),
+        ],
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? LedgerColors.darkRule
+                  : LedgerColors.border,
+            ),
+          ),
+        ),
+        child: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.dashboard_rounded),
-              selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Dashboard'),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Dashboard',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.account_balance_wallet_rounded),
-              selectedIcon: Icon(Icons.account_balance_wallet_rounded),
-              label: 'Recurring'),
+            icon: Icon(Icons.autorenew_rounded),
+            selectedIcon: Icon(Icons.autorenew_rounded),
+            label: 'Recurring',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.shopping_cart_checkout_rounded),
-              selectedIcon: Icon(Icons.shopping_cart_checkout_rounded),
-              label: 'Invoices'),
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long_rounded),
+            label: 'Invoices',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.people_alt_rounded),
-              selectedIcon: Icon(Icons.people_alt_rounded),
-              label: 'Clients'),
+            icon: Icon(Icons.people_outline_rounded),
+            selectedIcon: Icon(Icons.people_alt_rounded),
+            label: 'Clients',
+          ),
         ],
+        ),
       ),
     );
   }
@@ -503,8 +523,8 @@ class _LedgerDrawer extends StatelessWidget {
         ),
         child: hasLogo
             ? Image.file(File(logoPath), fit: BoxFit.cover)
-            : const Icon(Icons.receipt_long_rounded,
-                color: Colors.white, size: 30),
+            : Image.asset('assets/icons/ledger_app_icon.png',
+                fit: BoxFit.cover),
       ),
       children: const [
         SizedBox(height: 10),
@@ -546,7 +566,7 @@ class _DrawerHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [LedgerColors.primary, LedgerColors.secondary],
+          colors: [LedgerColors.primary, Color(0xFF7A6CFF)],
         ),
       ),
       padding: EdgeInsets.only(
@@ -575,7 +595,12 @@ class _DrawerHeader extends StatelessWidget {
                     errorBuilder: (_, __, ___) =>
                         _CompanyInitial(name: settings.businessName),
                   )
-                : _CompanyInitial(name: settings.businessName),
+                : Image.asset(
+                    'assets/icons/ledger_app_icon.png',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        _CompanyInitial(name: settings.businessName),
+                  ),
           ),
           const SizedBox(height: 12),
           Text(

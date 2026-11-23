@@ -45,32 +45,19 @@ class LedgerRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: BorderRadius.circular(18),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: .7),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.09),
-              blurRadius: 14,
-              offset: const Offset(2, 6),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.fromLTRB(8, 9, 12, 9),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+        decoration: AppTheme.cardDecoration(context),
+        padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
         child: Row(
           children: [
             Container(
-              width: 50,
-              height: 50,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: _tickColor(tick).withValues(alpha: .11),
-                shape: BoxShape.circle,
+                color: _tickColor(tick).withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 switch (tick) {

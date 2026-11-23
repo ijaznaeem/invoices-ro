@@ -56,8 +56,11 @@ class PublicFileService {
           fileName;
     }
 
-    final base = await getDownloadsDirectory() ??
-        await getApplicationDocumentsDirectory();
+    // iOS does not allow creating ~/Downloads inside the app container.
+    final base = Platform.isIOS
+        ? await getApplicationDocumentsDirectory()
+        : await getDownloadsDirectory() ??
+            await getApplicationDocumentsDirectory();
     final directory = Directory(p.join(base.path, subfolder));
     await directory.create(recursive: true);
     final file = File(p.join(directory.path, fileName));

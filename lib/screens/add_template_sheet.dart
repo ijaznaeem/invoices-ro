@@ -114,20 +114,32 @@ class _AddTemplateSheetState extends State<_AddTemplateSheet> {
         key: _formKey,
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
+              decoration: const BoxDecoration(
+                color: LedgerColors.primary,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
               child: Row(
                 children: [
+                  const Icon(Icons.autorenew_rounded, color: Colors.white),
+                  const SizedBox(width: 10),
                   Expanded(
-                      child: Text('New recurring invoice',
-                          style: Theme.of(context).textTheme.titleLarge)),
+                    child: Text(
+                      'New schedule',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: Colors.white),
+                    ),
+                  ),
                   IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close)),
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
                 ],
               ),
             ),
-            const Divider(height: 1),
             Expanded(
               child: ListView(
                 controller: scrollController,

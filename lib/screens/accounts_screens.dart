@@ -5,6 +5,7 @@ import '../state/app_state_scope.dart';
 import '../theme/app_theme.dart';
 import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
+import '../widgets/ledger_fab.dart';
 import '../widgets/ledger_row.dart';
 import '../widgets/searchable_dropdown.dart';
 import '../widgets/status_pill.dart';
@@ -45,8 +46,8 @@ class _AccountsLedgerScreenState extends State<AccountsLedgerScreen> {
             .toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Accounts ledger'),
+      appBar: AppTheme.screenBar(
+        'Accounts ledger',
         actions: [
           IconButton(
             tooltip: 'Cash report',
@@ -241,7 +242,7 @@ class _AccountHistoryScreenState extends State<AccountHistoryScreen> {
   Widget build(BuildContext context) {
     final isDebit = widget.balance >= 0;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.account)),
+      appBar: AppTheme.screenBar(widget.account),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
         child: _loading
@@ -432,7 +433,7 @@ class _CashReportScreenState extends State<CashReportScreen> {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Cash report')),
+      appBar: AppTheme.screenBar('Cash report'),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
         child: Column(
@@ -491,7 +492,7 @@ class _CashReportScreenState extends State<CashReportScreen> {
                                 child: _CashSummaryTile(
                                   label: 'Receipts',
                                   value: money(receiptTotal),
-                                  color: LedgerColors.paid,
+                                  color: LedgerColors.teal,
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -499,7 +500,7 @@ class _CashReportScreenState extends State<CashReportScreen> {
                                 child: _CashSummaryTile(
                                   label: 'Expenses',
                                   value: money(expenseTotal),
-                                  color: LedgerColors.overdue,
+                                  color: LedgerColors.accent,
                                 ),
                               ),
                             ],
@@ -509,8 +510,8 @@ class _CashReportScreenState extends State<CashReportScreen> {
                             label: 'Net cash',
                             value: money(net),
                             color: net >= 0
-                                ? LedgerColors.secondary
-                                : LedgerColors.overdue,
+                                ? LedgerColors.primary
+                                : LedgerColors.accent,
                             wide: true,
                           ),
                           if (headRows.isNotEmpty) ...[
@@ -615,19 +616,25 @@ class _CashSummaryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: wide ? double.infinity : null,
-      padding: const EdgeInsets.all(14),
-      decoration: AppTheme.cardDecoration(context),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(22),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 6),
           Text(
             value,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(color: color),
+            style: AppTheme.mono(size: 18, color: Colors.white),
           ),
         ],
       ),
@@ -643,11 +650,11 @@ class CashReceiptsScreen extends StatelessWidget {
     final state = AppStateScope.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Cash receipts')),
-      floatingActionButton: FloatingActionButton.extended(
+      appBar: AppTheme.screenBar('Cash receipts'),
+      floatingActionButton: LedgerFab(
+        label: 'Add receipt',
+        icon: Icons.payments_rounded,
         onPressed: () => _showAddReceipt(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Add receipt'),
       ),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
@@ -671,15 +678,11 @@ class CashReceiptsScreen extends StatelessWidget {
                     if (index == 0) {
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                        child: Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.savings_outlined),
-                            title: const Text('Total cash received'),
-                            trailing: Text(
-                              money(state.cashReceivedTotal),
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
+                        child: _CashSummaryTile(
+                          label: 'Total cash received',
+                          value: money(state.cashReceivedTotal),
+                          color: LedgerColors.teal,
+                          wide: true,
                         ),
                       );
                     }
@@ -711,24 +714,41 @@ class CashReceiptsScreen extends StatelessWidget {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(builder: (sheetContext, setSheetState) {
           return Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              16,
-              20,
-              MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
             ),
-            child: Column(
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                color: LedgerColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('New cash receipt',
-                    style: Theme.of(sheetContext).textTheme.titleLarge),
-                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                  decoration: const BoxDecoration(
+                    color: LedgerColors.teal,
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(28)),
+                  ),
+                  child: Text('New cash receipt',
+                      style: Theme.of(sheetContext)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: Colors.white)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                 TextFormField(
                   controller: fromController,
                   decoration: const InputDecoration(labelText: 'Received from'),
@@ -787,7 +807,11 @@ class CashReceiptsScreen extends StatelessWidget {
                   },
                   child: const Text('Save receipt'),
                 ),
+                    ],
+                  ),
+                ),
               ],
+            ),
             ),
           );
         });
@@ -808,8 +832,8 @@ class ExpensesScreen extends StatelessWidget {
     final state = AppStateScope.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Expenses'),
+      appBar: AppTheme.screenBar(
+        'Expenses',
         actions: [
           IconButton(
             tooltip: 'Manage heads',
@@ -821,10 +845,10 @@ class ExpensesScreen extends StatelessWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: LedgerFab(
+        label: 'Add expense',
+        icon: Icons.remove_rounded,
         onPressed: () => _showAddExpense(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Add expense'),
       ),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
@@ -848,15 +872,11 @@ class ExpensesScreen extends StatelessWidget {
                     if (index == 0) {
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                        child: Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.trending_down_rounded),
-                            title: const Text('Total expenses'),
-                            trailing: Text(
-                              money(state.expensesTotalAmount),
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
+                        child: _CashSummaryTile(
+                          label: 'Total expenses',
+                          value: money(state.expensesTotalAmount),
+                          color: LedgerColors.accent,
+                          wide: true,
                         ),
                       );
                     }
@@ -893,24 +913,41 @@ class ExpensesScreen extends StatelessWidget {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(builder: (sheetContext, setSheetState) {
           return Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              16,
-              20,
-              MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
             ),
-            child: Column(
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                color: LedgerColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('New expense',
-                    style: Theme.of(sheetContext).textTheme.titleLarge),
-                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                  decoration: const BoxDecoration(
+                    color: LedgerColors.accent,
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(28)),
+                  ),
+                  child: Text('New expense',
+                      style: Theme.of(sheetContext)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: Colors.white)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                 DropdownButtonFormField<int>(
                   initialValue: headId,
                   decoration: const InputDecoration(labelText: 'Expense head'),
@@ -978,7 +1015,11 @@ class ExpensesScreen extends StatelessWidget {
                   },
                   child: const Text('Save expense'),
                 ),
+                    ],
+                  ),
+                ),
               ],
+            ),
             ),
           );
         });
@@ -997,10 +1038,11 @@ class ExpenseHeadsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Expense heads')),
-      floatingActionButton: FloatingActionButton(
+      appBar: AppTheme.screenBar('Expense heads'),
+      floatingActionButton: LedgerFab(
+        label: 'Add expense head',
+        icon: Icons.add_rounded,
         onPressed: () => _editHead(context),
-        child: const Icon(Icons.add),
       ),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),
@@ -1076,10 +1118,11 @@ class TaxRatesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Tax rates')),
-      floatingActionButton: FloatingActionButton(
+      appBar: AppTheme.screenBar('Tax rates'),
+      floatingActionButton: LedgerFab(
+        label: 'Add tax rate',
+        icon: Icons.add_rounded,
         onPressed: () => _editRate(context),
-        child: const Icon(Icons.add),
       ),
       body: DecoratedBox(
         decoration: AppTheme.backgroundDecoration(context),

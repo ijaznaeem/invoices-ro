@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 
 class StatusPill extends StatelessWidget {
@@ -23,8 +24,8 @@ class StatusPill extends StatelessWidget {
       case 'Partial':
         return const StatusPill(
             label: 'Partial',
-            foreground: Color(0xFF2563EB),
-            background: Color(0xFFEFF6FF));
+            foreground: LedgerColors.sky,
+            background: Color(0xFFEEF2FF));
       case 'Overdue':
         return StatusPill(
             label: status,
@@ -84,40 +85,82 @@ class EmptyState extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
+  final bool embedded;
 
   const EmptyState({
     super.key,
     required this.title,
     required this.subtitle,
     this.icon = Icons.inbox_outlined,
+    this.embedded = false,
   });
+
+  /// Scrollable empty state that stays centered above a floating button.
+  static Widget fill({
+    required String title,
+    required String subtitle,
+    IconData icon = Icons.inbox_outlined,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: EmptyState(
+                title: title,
+                subtitle: subtitle,
+                icon: icon,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: LedgerColors.primary.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(icon, size: 26, color: LedgerColors.primary),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          subtitle,
+          style: Theme.of(context).textTheme.bodySmall,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+    if (embedded) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: content,
+      );
+    }
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-      child: Column(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: LedgerColors.primary.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Icon(icon, size: 28, color: LedgerColors.primary),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleLarge,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Text(subtitle,
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center),
-        ],
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 96),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        decoration: AppTheme.cardDecoration(context),
+        child: content,
       ),
     );
   }

@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import '../state/app_state_scope.dart';
 import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
+import '../widgets/ledger_fab.dart';
 import '../widgets/ledger_row.dart';
 import '../widgets/status_pill.dart';
 import 'add_template_sheet.dart';
@@ -21,15 +22,10 @@ class TemplatesScreen extends StatelessWidget {
       body: RefreshIndicator(
         onRefresh: () => state.reloadTemplates(),
         child: state.templates.isEmpty
-            ? ListView(
-                padding: const EdgeInsets.symmetric(vertical: 60),
-                children: const [
-                  EmptyState(
-                    title: 'No recurring invoices yet',
-                    subtitle: 'Tap the + button to set one up.',
-                    icon: Icons.autorenew,
-                  ),
-                ],
+            ? EmptyState.fill(
+                title: 'No recurring invoices yet',
+                subtitle: 'Tap New schedule to set one up.',
+                icon: Icons.autorenew,
               )
             : ListView.builder(
                 padding: const EdgeInsets.only(bottom: 90, top: 4),
@@ -53,11 +49,10 @@ class TemplatesScreen extends StatelessWidget {
                 },
               ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'templates_fab',
+      floatingActionButton: LedgerFab(
+        label: 'New schedule',
+        icon: Icons.autorenew_rounded,
         onPressed: () => showAddTemplateSheet(context),
-        icon: const Icon(Icons.add),
-        label: const Text('New recurring invoice'),
       ),
     );
   }

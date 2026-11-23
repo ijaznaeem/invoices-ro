@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../state/app_state_scope.dart';
+import '../theme/app_theme.dart';
 import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
+import '../widgets/ledger_fab.dart';
 import '../widgets/ledger_row.dart';
 import '../widgets/status_pill.dart';
 import 'invoice_edit_screen.dart';
@@ -19,11 +21,19 @@ class InvoicesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
 
-    return Stack(
-      children: [
-        Column(children: [
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: LedgerFab(
+        label: 'New invoice',
+        icon: Icons.receipt_long_rounded,
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const InvoiceEditScreen()),
+        ),
+      ),
+      body: Column(children: [
           SizedBox(
-            height: 44,
+            height: 56,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -44,16 +54,11 @@ class InvoicesScreen extends StatelessWidget {
             child: RefreshIndicator(
               onRefresh: () => state.reloadInvoices(),
               child: state.invoices.isEmpty
-                  ? ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 60),
-                      children: const [
-                        EmptyState(
-                          title: 'No invoices here',
-                          subtitle:
-                              'Create a one-off invoice or add a recurring schedule.',
-                          icon: Icons.receipt_long_outlined,
-                        ),
-                      ],
+                  ? EmptyState.fill(
+                      title: 'No invoices here',
+                      subtitle:
+                          'Create a one-off invoice or add a recurring schedule.',
+                      icon: Icons.receipt_long_outlined,
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.only(bottom: 88, top: 4),
@@ -90,20 +95,6 @@ class InvoicesScreen extends StatelessWidget {
             ),
           ),
         ]),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton.extended(
-            heroTag: 'invoices_fab',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const InvoiceEditScreen()),
-            ),
-            icon: const Icon(Icons.add),
-            label: const Text('New invoice'),
-          ),
-        ),
-      ],
     );
   }
 
@@ -216,30 +207,55 @@ class InvoicesScreen extends StatelessWidget {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
             return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
               ),
-              child: Column(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  color: LedgerColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Record payment',
-                      style: Theme.of(sheetContext).textTheme.titleLarge),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${inv.invoiceNumber} · Balance ${money(inv.balanceDue)}',
-                    style: Theme.of(sheetContext).textTheme.bodySmall,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                    decoration: const BoxDecoration(
+                      color: LedgerColors.teal,
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(28)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Record payment',
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(color: Colors.white)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${inv.invoiceNumber} · Balance ${money(inv.balanceDue)}',
+                          style: Theme.of(sheetContext)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.white70),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                   TextFormField(
                     controller: amountController,
                     keyboardType:
@@ -319,7 +335,11 @@ class InvoicesScreen extends StatelessWidget {
                     },
                     child: const Text('Save payment'),
                   ),
+                      ],
+                    ),
+                  ),
                 ],
+              ),
               ),
             );
           },
