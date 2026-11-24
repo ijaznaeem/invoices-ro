@@ -4,6 +4,7 @@ import '../db/database_helper.dart';
 import '../db/generation_engine.dart';
 import '../models/models.dart';
 import '../services/backup_service.dart';
+import '../services/firebase_sync_service.dart';
 import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
 
@@ -44,6 +45,7 @@ class AppState extends ChangeNotifier {
   bool isLoading = false;
 
   Future<void> bootstrap() async {
+    await FirebaseSyncService.instance.syncOnLaunch();
     await runGenerationCheck(silent: true);
     await Future.wait([
       reloadClients(),

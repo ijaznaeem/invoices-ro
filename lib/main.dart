@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'db/database_helper.dart';
 import 'models/models.dart';
+import 'services/firebase_sync_service.dart';
 import 'screens/clients_screen.dart';
 import 'screens/backup_restore_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -17,9 +19,12 @@ import 'state/app_state_scope.dart';
 import 'theme/app_theme.dart';
 import 'widgets/ledger_glass_background.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
+  await FirebaseSyncService.instance.ensureInitialized();
+  DatabaseHelper.instance
+      .addChangeListener(FirebaseSyncService.instance.schedulePush);
   runApp(const LedgerApp());
 }
 

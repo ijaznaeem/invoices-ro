@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 
 import '../db/database_helper.dart';
+import '../firebase_server_client.dart';
 import '../models/models.dart';
 import 'public_file_service.dart';
 import 'drive_backup_store.dart';
@@ -72,6 +73,9 @@ class BackupService {
   final DatabaseHelper _db = DatabaseHelper.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: Platform.isIOS ? _iosClientId : null,
+    serverClientId: firebaseAndroidServerClientId.isEmpty
+        ? null
+        : firebaseAndroidServerClientId,
     scopes: [_driveScope],
   );
   String? lastCloudError;
@@ -195,27 +199,23 @@ class BackupService {
     final target = await FilePicker.saveFile(
       dialogTitle: 'Export Ledger backup',
       fileName: p.basename(backup.path),
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
+      mimeType: 'application/zip',
       bytes: await backup.readAsBytes(),
     );
     if (target == null) return;
   }
 
   Future<File?> pickBackup() async {
-    final result = await FilePicker.pickFiles(
+    final picked = await FilePicker.pickFile(
       dialogTitle: 'Select a Ledger backup',
       type: FileType.custom,
       allowedExtensions: ['zip'],
-      withData: true,
     );
-    final picked = result?.files.single;
     if (picked == null) return null;
     if (picked.path != null) return File(picked.path!);
-    if (picked.bytes == null) return null;
     final file = File(
         p.join((await Directory.systemTemp.createTemp()).path, picked.name));
-    return file..writeAsBytesSync(picked.bytes!);
+    return file..writeAsBytesSync(await picked.readAsBytes());
   }
 
   Future<void> restoreBackup(File backup) async {
@@ -299,6 +299,15 @@ class BackupService {
     final email = prefs.getString(_driveEmailKey);
     if (email == null || email.trim().isEmpty) return null;
     return email;
+  }
+
+  /// Google account used for Drive backups and Firebase Auth.
+  Future<GoogleSignInAccount?> signInForCloud({required bool interactive}) async {
+    final current = _googleSignIn.currentUser;
+    if (current != null) return current;
+    final silent = await _googleSignIn.signInSilently(reAuthenticate: true);
+    if (silent != null || !interactive) return silent;
+    return _googleSignIn.signIn();
   }
 
   /// Restores the previous Google session without showing the sign-in sheet.

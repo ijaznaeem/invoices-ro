@@ -12,6 +12,44 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
 
   Database? _db;
+  final List<void Function()> _changeListeners = [];
+  bool suppressChangeNotifications = false;
+
+  /// Fired after a local ledger write. Cloud sync listens for this.
+  void addChangeListener(void Function() listener) {
+    _changeListeners.add(listener);
+  }
+
+  void _touch() {
+    if (suppressChangeNotifications) return;
+    for (final listener in List<void Function()>.from(_changeListeners)) {
+      listener();
+    }
+  }
+
+  Future<T> runWithoutNotify<T>(Future<T> Function() action) async {
+    final previous = suppressChangeNotifications;
+    suppressChangeNotifications = true;
+    try {
+      return await action();
+    } finally {
+      suppressChangeNotifications = previous;
+    }
+  }
+
+  static const cloudTables = <String>[
+    'clients',
+    'expense_heads',
+    'tax_rates',
+    'payment_options',
+    'business_settings',
+    'templates',
+    'invoices',
+    'invoice_payments',
+    'expenses',
+    'cash_receipts',
+    'ledger_entries',
+  ];
 
   Future<String> get databasePath async {
     final dbPath = await getDatabasesPath();
@@ -352,6 +390,7 @@ class DatabaseHelper {
     await target.parent.create(recursive: true);
     await File(sourcePath).copy(target.path);
     await database;
+    _touch();
   }
 
   Future<void> _addColumnIfMissing(
@@ -372,6 +411,7 @@ class DatabaseHelper {
   Future<Client> insertClient(Client client) async {
     final db = await database;
     final id = await db.insert('clients', client.toMap());
+    _touch();
     return client.copyWith(id: id);
   }
 
@@ -379,12 +419,14 @@ class DatabaseHelper {
     final db = await database;
     await db.update('clients', client.toMap(),
         where: 'id = ?', whereArgs: [client.id]);
+    _touch();
   }
 
   Future<void> deleteClient(int id) async {
     final db = await database;
     await db.delete('templates', where: 'client_id = ?', whereArgs: [id]);
     await db.delete('clients', where: 'id = ?', whereArgs: [id]);
+    _touch();
   }
 
   Future<List<Client>> getClients() async {
@@ -406,6 +448,7 @@ class DatabaseHelper {
   Future<RecurringTemplate> insertTemplate(RecurringTemplate template) async {
     final db = await database;
     final id = await db.insert('templates', template.toMap());
+    _touch();
     return template.withId(id);
   }
 
@@ -433,6 +476,7 @@ class DatabaseHelper {
     final db = await database;
     await db.update('templates', {'status': status.name},
         where: 'id = ?', whereArgs: [id]);
+    _touch();
   }
 
   Future<void> updateTemplateProgress(
@@ -447,11 +491,13 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+    _touch();
   }
 
   Future<void> deleteTemplate(int id) async {
     final db = await database;
     await db.delete('templates', where: 'id = ?', whereArgs: [id]);
+    _touch();
   }
 
   // ---------- Invoices ----------
@@ -459,6 +505,7 @@ class DatabaseHelper {
   Future<InvoiceRecord> insertInvoice(InvoiceRecord invoice) async {
     final db = await database;
     final id = await db.insert('invoices', invoice.toMap());
+    _touch();
     return invoice.copyWith(id: id);
   }
 
@@ -470,6 +517,7 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [invoice.id],
     );
+    _touch();
   }
 
   Future<InvoiceRecord?> getInvoice(int id) async {
@@ -514,6 +562,7 @@ class DatabaseHelper {
       if (inv != null) updates['amount_paid'] = inv.total;
     }
     await db.update('invoices', updates, where: 'id = ?', whereArgs: [id]);
+    _touch();
   }
 
   Future<void> updateInvoicePaymentState({
@@ -533,6 +582,7 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [invoiceId],
     );
+    _touch();
   }
 
   // ---------- Invoice payments ----------
@@ -540,6 +590,7 @@ class DatabaseHelper {
   Future<InvoicePayment> insertInvoicePayment(InvoicePayment payment) async {
     final db = await database;
     final id = await db.insert('invoice_payments', payment.toMap());
+    _touch();
     return InvoicePayment(
       id: id,
       invoiceId: payment.invoiceId,
@@ -572,6 +623,7 @@ class DatabaseHelper {
   Future<TaxRate> insertTaxRate(TaxRate rate) async {
     final db = await database;
     final id = await db.insert('tax_rates', rate.toMap());
+    _touch();
     return TaxRate(
       id: id,
       name: rate.name,
@@ -584,11 +636,13 @@ class DatabaseHelper {
     final db = await database;
     await db.update('tax_rates', rate.toMap(),
         where: 'id = ?', whereArgs: [rate.id]);
+    _touch();
   }
 
   Future<void> deleteTaxRate(int id) async {
     final db = await database;
     await db.delete('tax_rates', where: 'id = ?', whereArgs: [id]);
+    _touch();
   }
 
   // ---------- Expense heads / expenses ----------
@@ -603,6 +657,7 @@ class DatabaseHelper {
   Future<ExpenseHead> insertExpenseHead(ExpenseHead head) async {
     final db = await database;
     final id = await db.insert('expense_heads', head.toMap());
+    _touch();
     return ExpenseHead(id: id, name: head.name, sortOrder: head.sortOrder);
   }
 
@@ -610,17 +665,20 @@ class DatabaseHelper {
     final db = await database;
     await db.update('expense_heads', head.toMap(),
         where: 'id = ?', whereArgs: [head.id]);
+    _touch();
   }
 
   Future<void> deleteExpenseHead(int id) async {
     final db = await database;
     await db.delete('expenses', where: 'head_id = ?', whereArgs: [id]);
     await db.delete('expense_heads', where: 'id = ?', whereArgs: [id]);
+    _touch();
   }
 
   Future<ExpenseRecord> insertExpense(ExpenseRecord expense) async {
     final db = await database;
     final id = await db.insert('expenses', expense.toMap());
+    _touch();
     return ExpenseRecord(
       id: id,
       headId: expense.headId,
@@ -634,6 +692,7 @@ class DatabaseHelper {
   Future<void> deleteExpense(int id) async {
     final db = await database;
     await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
+    _touch();
   }
 
   Future<List<ExpenseRecord>> getExpenses() async {
@@ -659,6 +718,7 @@ class DatabaseHelper {
   Future<CashReceipt> insertCashReceipt(CashReceipt receipt) async {
     final db = await database;
     final id = await db.insert('cash_receipts', receipt.toMap());
+    _touch();
     return CashReceipt(
       id: id,
       amount: receipt.amount,
@@ -673,6 +733,7 @@ class DatabaseHelper {
   Future<void> deleteCashReceipt(int id) async {
     final db = await database;
     await db.delete('cash_receipts', where: 'id = ?', whereArgs: [id]);
+    _touch();
   }
 
   Future<List<CashReceipt>> getCashReceipts() async {
@@ -703,6 +764,7 @@ class DatabaseHelper {
       batch.insert('ledger_entries', entry.toMap());
     }
     await batch.commit(noResult: true);
+    _touch();
   }
 
   Future<List<LedgerEntry>> getLedgerEntries({int limit = 200}) async {
@@ -986,6 +1048,7 @@ class DatabaseHelper {
       settings.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _touch();
   }
 
   // ---------- Payment options ----------
@@ -1002,6 +1065,7 @@ class DatabaseHelper {
   Future<PaymentOption> insertPaymentOption(PaymentOption option) async {
     final db = await database;
     final id = await db.insert('payment_options', option.toMap());
+    _touch();
     return PaymentOption(
       id: id,
       label: option.label,
@@ -1018,10 +1082,82 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [option.id],
     );
+    _touch();
   }
 
   Future<void> deletePaymentOption(int id) async {
     final db = await database;
     await db.delete('payment_options', where: 'id = ?', whereArgs: [id]);
+    _touch();
+  }
+
+  /// Rows the user actually entered, ignoring seeded tax rates and expense heads.
+  Future<int> userRecordCount() async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT
+        (SELECT COUNT(*) FROM clients) +
+        (SELECT COUNT(*) FROM invoices) +
+        (SELECT COUNT(*) FROM templates) +
+        (SELECT COUNT(*) FROM expenses) +
+        (SELECT COUNT(*) FROM cash_receipts) +
+        (SELECT COUNT(*) FROM ledger_entries) AS c
+    ''');
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<Map<String, List<Map<String, Object?>>>> exportCloudTables() async {
+    final db = await database;
+    final tables = <String, List<Map<String, Object?>>>{};
+    for (final table in cloudTables) {
+      final rows = await db.query(table);
+      tables[table] = [
+        for (final row in rows) Map<String, Object?>.from(row),
+      ];
+    }
+    if (tables['business_settings']!.isEmpty) {
+      tables['business_settings'] = [
+        Map<String, Object?>.from(const BusinessSettings().toMap()),
+      ];
+    }
+    return tables;
+  }
+
+  Future<void> replaceCloudTables(
+    Map<String, List<Map<String, Object?>>> tables,
+  ) {
+    return runWithoutNotify(() async {
+      final db = await database;
+      final columns = <String, Set<String>>{};
+      Future<Set<String>> columnNames(String table) async {
+        final cached = columns[table];
+        if (cached != null) return cached;
+        final info = await db.rawQuery('PRAGMA table_info($table)');
+        final names = info.map((row) => row['name'] as String).toSet();
+        columns[table] = names;
+        return names;
+      }
+
+      await db.transaction((txn) async {
+        for (final table in cloudTables.reversed) {
+          await txn.delete(table);
+        }
+        for (final table in cloudTables) {
+          final allowed = await columnNames(table);
+          for (final row in tables[table] ?? const <Map<String, Object?>>[]) {
+            final clean = <String, Object?>{};
+            for (final entry in row.entries) {
+              if (!allowed.contains(entry.key)) continue;
+              final value = entry.value;
+              if (value == null || value is num || value is String) {
+                clean[entry.key] = value;
+              }
+            }
+            if (clean['id'] == null) continue;
+            await txn.insert(table, clean);
+          }
+        }
+      });
+    });
   }
 }

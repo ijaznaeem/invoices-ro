@@ -6,6 +6,7 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 
 import '../services/backup_service.dart';
+import '../services/firebase_sync_service.dart';
 import '../state/app_state_scope.dart';
 import '../theme/app_theme.dart';
 
@@ -18,6 +19,7 @@ class BackupRestoreScreen extends StatefulWidget {
 
 class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   final _service = BackupService.instance;
+  final _firebase = FirebaseSyncService.instance;
   final _customDaysController = TextEditingController();
   final _keepLastController = TextEditingController();
   BackupPreferences _preferences = const BackupPreferences();
@@ -33,14 +35,20 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   @override
   void initState() {
     super.initState();
+    _firebase.addListener(_onFirebase);
     _load();
   }
 
   @override
   void dispose() {
+    _firebase.removeListener(_onFirebase);
     _customDaysController.dispose();
     _keepLastController.dispose();
     super.dispose();
+  }
+
+  void _onFirebase() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -174,6 +182,26 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       await _refreshBackups();
     }
   }
+
+  Future<void> _setFirebaseEnabled(bool enabled) => _runBusy(() async {
+        await _firebase.setEnabled(enabled);
+        if (!mounted) return;
+        if (enabled) {
+          await AppStateScope.of(context).bootstrap();
+          _showMessage(_firebase.lastError == null
+              ? 'Ledger synced with Firebase.'
+              : _firebase.lastError!);
+        }
+      });
+
+  Future<void> _syncFirebaseNow() => _runBusy(() async {
+        final replaced = await _firebase.sync(interactive: true);
+        if (!mounted) return;
+        if (replaced) await AppStateScope.of(context).bootstrap();
+        _showMessage(_firebase.lastError == null
+            ? 'Ledger synced with Firebase.'
+            : _firebase.lastError!);
+      });
 
   Future<void> _setDriveEnabled(bool enabled) => _runBusy(() async {
         if (enabled) {
@@ -390,6 +418,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  _sectionTitle('Firebase'),
+                  const SizedBox(height: 8),
+                  Card(child: _firebaseCard()),
+                  const SizedBox(height: 24),
                   Row(
                     children: [
                       Expanded(
@@ -458,6 +490,54 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _firebaseCard() {
+    if (!_firebase.ready) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'The ledger stays on this phone until Firebase is connected. '
+          'Add this app to the existing Google Cloud project, register package '
+          'com.octavions.invoices_ro with SHA-1 '
+          '2F:86:FE:BD:E2:21:E5:98:E8:25:41:BB:E5:84:E0:9C:13:3E:D7:1D, '
+          'then run flutterfire configure and publish firestore.rules.',
+        ),
+      );
+    }
+    final synced = _firebase.lastSync == null
+        ? 'Not synced yet'
+        : 'Last sync ${DateFormat.yMMMd().add_jm().format(_firebase.lastSync!.toLocal())}';
+    return Column(
+      children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.cloud_sync_outlined),
+          title: const Text('Sync ledger to Firebase'),
+          subtitle: Text(_firebase.email ?? 'Uses your Google account'),
+          value: _firebase.enabled,
+          onChanged: _busy ? null : _setFirebaseEnabled,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            'Clients, invoices, expenses, and receipts are stored under your '
+            'account. A newer cloud copy downloads when the app opens, unless '
+            'this phone still has edits waiting to upload. $synced',
+          ),
+        ),
+        if (_firebase.lastError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(_firebase.lastError!),
+          ),
+        if (_firebase.enabled)
+          TextButton.icon(
+            onPressed: _busy ? null : _syncFirebaseNow,
+            icon: const Icon(Icons.sync),
+            label: const Text('Sync now'),
+          ),
+      ],
     );
   }
 
