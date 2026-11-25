@@ -8,6 +8,8 @@ import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../services/public_file_service.dart';
 import '../util/invoice_pdf.dart';
+import '../services/whiztext_service.dart';
+import 'whatsapp_send_screen.dart';
 
 class InvoicePdfPreviewScreen extends StatefulWidget {
   final InvoiceRecord invoice;
@@ -81,6 +83,15 @@ class _InvoicePdfPreviewScreenState extends State<InvoicePdfPreviewScreen> {
       appBar: AppTheme.screenBar(
         'PDF · ${widget.invoice.invoiceNumber}',
         actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Send via WhatsApp',
+            icon: const Icon(Icons.chat_outlined),
+            onSelected: _sendWhatsApp,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'pdf', child: Text('WhatsApp PDF')),
+              PopupMenuItem(value: 'image', child: Text('WhatsApp images')),
+            ],
+          ),
           PopupMenuButton<String>(
             tooltip: 'Download invoice',
             icon: const Icon(Icons.download_outlined),
@@ -156,6 +167,36 @@ class _InvoicePdfPreviewScreenState extends State<InvoicePdfPreviewScreen> {
   }
 
   String get _pdfFileName => 'invoice_${widget.invoice.invoiceNumber}.pdf';
+  void _sendWhatsApp(String format) {
+    Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => WhatsAppSendScreen(
+                  recipient:
+                      widget.client?.phone ?? widget.invoice.clientPhone ?? '',
+                  invoiceNumber: widget.invoice.invoiceNumber,
+                  formatLabel: format == 'pdf' ? 'PDF' : 'images',
+                  prepareAttachments: () async {
+                    if (format == 'pdf') {
+                      return [
+                        WhizTextAttachment(
+                            bytes: await _getPdfBytes(),
+                            fileName: _pdfFileName,
+                            mimeType: 'application/pdf')
+                      ];
+                    }
+                    final images = await _getInvoiceImages();
+                    return [
+                      for (var i = 0; i < images.length; i++)
+                        WhizTextAttachment(
+                            bytes: images[i],
+                            fileName: _imageFileName(i, images.length),
+                            mimeType: 'image/png')
+                    ];
+                  },
+                )));
+  }
+
   String _imageFileName(int page, int pageCount) =>
       'invoice_${widget.invoice.invoiceNumber}'
       '${pageCount == 1 ? '' : '_page_${page + 1}'}.png';

@@ -1,15 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../db/database_helper.dart';
 import '../db/generation_engine.dart';
 import '../models/models.dart';
 import '../services/backup_service.dart';
-import '../services/firebase_sync_service.dart';
 import '../util/currency_utils.dart';
 import '../util/date_utils.dart';
 
 /// Holds everything the UI needs and knows how to reload itself from
-/// SQLite. Kept dependency-free (no state management package) — screens
+/// Firestore. Kept dependency-free (no state management package) — screens
 /// listen to this via [AppStateScope] further down the widget tree.
 class AppState extends ChangeNotifier {
   final DatabaseHelper _db = DatabaseHelper.instance;
@@ -43,10 +44,46 @@ class AppState extends ChangeNotifier {
   List<MonthlyAmount> monthlyCash = [];
 
   bool isLoading = false;
+  String? lastError;
+  Timer? _reloadTimer;
+  bool _listening = false;
+
+  void _onDatabaseChanged() {
+    _reloadTimer?.cancel();
+    _reloadTimer = Timer(const Duration(milliseconds: 150), () async {
+      try {
+        await reloadAll();
+        lastError = null;
+      } catch (error) {
+        lastError = '$error';
+        notifyListeners();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _reloadTimer?.cancel();
+    if (_listening) _db.removeChangeListener(_onDatabaseChanged);
+    super.dispose();
+  }
 
   Future<void> bootstrap() async {
-    await FirebaseSyncService.instance.syncOnLaunch();
-    await runGenerationCheck(silent: true);
+    if (!_listening) {
+      _db.addChangeListener(_onDatabaseChanged);
+      _listening = true;
+    }
+    try {
+      await runGenerationCheck(silent: true);
+    } catch (_) {
+      lastError =
+          'Recurring invoices could not be checked. Connect to the internet and refresh to try again.';
+    }
+    await reloadAll();
+    await runBackupCheck();
+  }
+
+  Future<void> reloadAll() async {
     await Future.wait([
       reloadClients(),
       reloadTemplates(),
@@ -60,7 +97,6 @@ class AppState extends ChangeNotifier {
       reloadCashReceipts(),
       reloadLedger(),
     ]);
-    await runBackupCheck();
   }
 
   Future<void> runBackupCheck() async {
@@ -175,10 +211,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> addInvoice(InvoiceRecord invoice) async {
-    final saved = await _db.insertInvoice(invoice);
-    await _postInvoiceToLedger(saved);
-    await _db.insertNotification(
-        'Invoice ${saved.invoiceNumber} created for ${saved.clientName ?? 'client'}');
+    await _db.insertInvoice(invoice);
     await Future.wait([
       reloadInvoices(),
       reloadDashboard(),
@@ -187,8 +220,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String> nextInvoiceNumber(String issueDate) async {
-    final count = await _db.countInvoices();
-    return 'INV-${issueDate.substring(0, 4)}-${(count + 1).toString().padLeft(4, '0')}';
+    return _db.nextInvoiceNumber(issueDate);
   }
 
   Future<void> reloadBusinessSettings() async {
@@ -266,7 +298,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteExpenseHead(int id) async {
     await _db.deleteExpenseHead(id);
-    await Future.wait([reloadExpenseHeads(), reloadExpenses(), reloadDashboard()]);
+    await Future.wait(
+        [reloadExpenseHeads(), reloadExpenses(), reloadDashboard()]);
   }
 
   Future<void> reloadExpenses() async {
@@ -275,33 +308,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> addExpense(ExpenseRecord expense) async {
-    final saved = await _db.insertExpense(expense);
-    final headName = expenseHeads
-            .where((h) => h.id == saved.headId)
-            .map((h) => h.name)
-            .firstOrNull ??
-        expense.headName ??
-        'Expense';
-    await _db.insertLedgerEntries([
-      LedgerEntry(
-        entryDate: saved.expenseDate,
-        account: 'Expense — $headName',
-        description: saved.notes?.trim().isNotEmpty == true
-            ? saved.notes!
-            : 'Expense under $headName',
-        debit: saved.amount,
-        refType: 'expense',
-        refId: saved.id,
-      ),
-      LedgerEntry(
-        entryDate: saved.expenseDate,
-        account: 'Cash',
-        description: 'Expense paid — $headName',
-        credit: saved.amount,
-        refType: 'expense',
-        refId: saved.id,
-      ),
-    ]);
+    await _db.insertExpense(expense);
     await Future.wait([
       reloadExpenses(),
       reloadLedger(),
@@ -320,27 +327,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> addCashReceipt(CashReceipt receipt) async {
-    final saved = await _db.insertCashReceipt(receipt);
-    await _db.insertLedgerEntries([
-      LedgerEntry(
-        entryDate: saved.receiptDate,
-        account: 'Cash',
-        description: 'Cash received from ${saved.receivedFrom}',
-        debit: saved.amount,
-        refType: 'cash_receipt',
-        refId: saved.id,
-      ),
-      LedgerEntry(
-        entryDate: saved.receiptDate,
-        account: 'Other Income',
-        description: saved.notes?.trim().isNotEmpty == true
-            ? saved.notes!
-            : 'Cash receipt',
-        credit: saved.amount,
-        refType: 'cash_receipt',
-        refId: saved.id,
-      ),
-    ]);
+    await _db.insertCashReceipt(receipt);
     await Future.wait([
       reloadCashReceipts(),
       reloadLedger(),
@@ -401,65 +388,7 @@ class AppState extends ChangeNotifier {
     String method = 'Cash',
     String? notes,
   }) async {
-    if (amount <= 0) {
-      throw ArgumentError('Payment amount must be greater than zero');
-    }
-    final remaining = invoice.balanceDue;
-    final applied = amount > remaining ? remaining : amount;
-    if (applied <= 0) return;
-
-    final payment = await _db.insertInvoicePayment(InvoicePayment(
-      invoiceId: invoice.id!,
-      amount: applied,
-      paymentDate: paymentDate,
-      method: method,
-      notes: notes,
-    ));
-
-    final newPaid = invoice.amountPaid + applied;
-    final status = newPaid + 0.0001 >= invoice.total
-        ? InvoiceStatus.paid
-        : InvoiceStatus.partial;
-    await _db.updateInvoicePaymentState(
-      invoiceId: invoice.id!,
-      amountPaid: newPaid,
-      status: status,
-      paidDate: status == InvoiceStatus.paid ? paymentDate : invoice.paidDate,
-    );
-
-    await _db.insertCashReceipt(CashReceipt(
-      amount: applied,
-      receiptDate: paymentDate,
-      receivedFrom: invoice.clientName?.trim().isNotEmpty == true
-          ? invoice.clientName!
-          : 'Client',
-      notes: notes ??
-          'Payment for ${invoice.invoiceNumber}${method.isNotEmpty ? ' via $method' : ''}',
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-    ));
-
-    await _db.insertLedgerEntries([
-      LedgerEntry(
-        entryDate: paymentDate,
-        account: 'Cash',
-        description: 'Payment received — ${invoice.invoiceNumber}',
-        debit: applied,
-        refType: 'payment',
-        refId: payment.id,
-      ),
-      LedgerEntry(
-        entryDate: paymentDate,
-        account: 'Accounts Receivable',
-        description: 'Payment applied — ${invoice.invoiceNumber}',
-        credit: applied,
-        refType: 'payment',
-        refId: payment.id,
-      ),
-    ]);
-
-    await _db.insertNotification(
-        'Received ${money(applied)} for ${invoice.invoiceNumber}');
+    await _db.recordPayment(invoice.id!, amount, paymentDate, method, notes);
 
     await Future.wait([
       reloadInvoices(),
@@ -499,37 +428,5 @@ class AppState extends ChangeNotifier {
   Future<void> updateInvoice(InvoiceRecord invoice) async {
     await _db.updateInvoice(invoice);
     await Future.wait([reloadInvoices(), reloadDashboard()]);
-  }
-
-  Future<void> _postInvoiceToLedger(InvoiceRecord invoice) async {
-    final entries = <LedgerEntry>[
-      LedgerEntry(
-        entryDate: invoice.issueDate,
-        account: 'Accounts Receivable',
-        description: 'Invoice ${invoice.invoiceNumber}',
-        debit: invoice.total,
-        refType: 'invoice',
-        refId: invoice.id,
-      ),
-      LedgerEntry(
-        entryDate: invoice.issueDate,
-        account: 'Sales Revenue',
-        description: 'Invoice ${invoice.invoiceNumber} — subtotal',
-        credit: invoice.subtotal,
-        refType: 'invoice',
-        refId: invoice.id,
-      ),
-    ];
-    if (invoice.tax > 0) {
-      entries.add(LedgerEntry(
-        entryDate: invoice.issueDate,
-        account: 'Tax Payable',
-        description: 'Invoice ${invoice.invoiceNumber} — tax',
-        credit: invoice.tax,
-        refType: 'invoice',
-        refId: invoice.id,
-      ));
-    }
-    await _db.insertLedgerEntries(entries);
   }
 }

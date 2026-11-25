@@ -1,6 +1,6 @@
 # Ledger — Invoices RO
 
-Private, on-device invoicing and bookkeeping app for creating invoices, tracking payments, cash, and expenses. Data stays on the device unless you export a backup or enable Google Drive backups.
+Private invoicing and bookkeeping app backed by Firebase Authentication and Cloud Firestore. Sign in with Google to access invoices, payments, cash, and expenses across devices. Existing SQLite ledgers are imported on first sign-in.
 
 ## Features
 
@@ -17,10 +17,19 @@ Private, on-device invoicing and bookkeeping app for creating invoices, tracking
 
 ## Requirements
 
-- [Flutter](https://docs.flutter.dev/get-started/install) SDK `>=3.1.0`
-- Android device or emulator (API 21+), or Windows / Chrome for desktop/web smoke tests
+- [Flutter](https://docs.flutter.dev/get-started/install) SDK (verified with 3.50.1 / Dart 3.14.0)
+- A configured Firebase project with Firestore and Google sign-in; see [Firebase setup and migration](docs/firebase_setup.md)
+- Android device or emulator (API 24+), or an iOS device/simulator (iOS 15+)
+
+Android uses AGP 9 built-in Kotlin (`android.builtInKotlin=true`), following
+[Flutter's migration guide](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers).
+Keep `pubspec.lock` when building: it includes the compatible Android preferences
+plugin. Firebase Core 5.2+, Auth 7.1+, and Firestore 7.2+ support this configuration.
+`android.newDsl=false` retains the DSL compatibility required by Flutter plugins.
 
 ## Getting started
+
+Firebase is configured for `invoices-ro`; normal run/build commands use the checked-in OAuth IDs. See [Firebase setup and migration](docs/firebase_setup.md) for deployment and certificate details.
 
 ```bash
 flutter pub get
@@ -69,7 +78,7 @@ your account from **Backup & Restore** and tap **Back up now**.
 lib/
   main.dart                 # App shell, navigation, drawer
   models/                   # Invoices, clients, ledger, tax, expenses
-  db/                       # SQLite schema + recurring generation
+  db/                       # Firestore repository, legacy importer, recurring generation
   state/                    # AppState (ChangeNotifier)
   screens/                  # Dashboard, invoices, clients, accounts, settings
   widgets/                  # Shared UI pieces
@@ -96,14 +105,15 @@ lib/
 
 ## Data & privacy
 
-- Local SQLite database (`ledger.db`) on device  
-- No required cloud account  
+- Cloud Firestore records are scoped to your Firebase Auth account
+- SQLite is retained only for legacy import and backup compatibility
+- Cached reads can work offline; financial transactions require a connection
 - Backup & Restore is optional and user-triggered (or scheduled from preferences)
 
 ## Build notes
 
 ```bash
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter build apk --release
 ```
 

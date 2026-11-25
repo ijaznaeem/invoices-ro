@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'db/database_helper.dart';
 import 'models/models.dart';
 import 'services/firebase_sync_service.dart';
 import 'screens/clients_screen.dart';
@@ -23,9 +22,85 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
   await FirebaseSyncService.instance.ensureInitialized();
-  DatabaseHelper.instance
-      .addChangeListener(FirebaseSyncService.instance.schedulePush);
-  runApp(const LedgerApp());
+  runApp(const FirebaseGate());
+}
+
+/// Keep the ledger closed until authentication and legacy import succeed.
+class FirebaseGate extends StatefulWidget {
+  const FirebaseGate({super.key});
+  @override
+  State<FirebaseGate> createState() => _FirebaseGateState();
+}
+
+class _FirebaseGateState extends State<FirebaseGate> {
+  final _firebase = FirebaseSyncService.instance;
+  bool _opening = true;
+  bool _connected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _open(false);
+  }
+
+  Future<void> _open(bool interactive) async {
+    setState(() => _opening = true);
+    try {
+      final connected = await _firebase.connect(interactive: interactive);
+      if (mounted) setState(() => _connected = connected);
+    } catch (_) {
+      // The service exposes a useful error and retry stays on this screen.
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_connected) return const LedgerApp();
+    return MaterialApp(
+      title: 'Ledger',
+      theme: AppTheme.light(),
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+          body: SafeArea(
+              child: Center(
+                  child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_outlined, size: 56),
+                const SizedBox(height: 20),
+                const Text('Your ledger in the cloud',
+                    style:
+                        TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                const Text(
+                    'Sign in to access your invoices, clients, and accounts. Existing data on this device will be imported into your account.',
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                if (_opening) ...[
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 12),
+                  const Text('Opening your ledger…'),
+                ] else ...[
+                  if (_firebase.lastError != null) ...[
+                    Text(_firebase.lastError!, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                  ],
+                  FilledButton.icon(
+                      onPressed: () => _open(true),
+                      icon: const Icon(Icons.login),
+                      label: const Text('Continue with Google')),
+                ],
+              ],
+            )),
+      )))),
+    );
+  }
 }
 
 class LedgerApp extends StatefulWidget {
@@ -38,11 +113,18 @@ class LedgerApp extends StatefulWidget {
 class _LedgerAppState extends State<LedgerApp> {
   final AppState _appState = AppState();
   ThemeMode _themeMode = ThemeMode.light;
+  late Future<void> _bootstrap;
 
   @override
   void initState() {
     super.initState();
-    _appState.bootstrap();
+    _bootstrap = _appState.bootstrap();
+  }
+
+  @override
+  void dispose() {
+    _appState.dispose();
+    super.dispose();
   }
 
   void _toggleTheme() {
@@ -60,7 +142,33 @@ class _LedgerAppState extends State<LedgerApp> {
         themeMode: _themeMode,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
-        home: HomeShell(onToggleTheme: _toggleTheme, themeMode: _themeMode),
+        home: FutureBuilder<void>(
+          future: _bootstrap,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()));
+            }
+            if (snapshot.hasError) {
+              return Scaffold(
+                  body: Center(
+                      child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text('Could not load the ledger: ${snapshot.error}',
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                      onPressed: () =>
+                          setState(() => _bootstrap = _appState.bootstrap()),
+                      child: const Text('Retry')),
+                ]),
+              )));
+            }
+            return HomeShell(
+                onToggleTheme: _toggleTheme, themeMode: _themeMode);
+          },
+        ),
       ),
     );
   }
@@ -193,30 +301,30 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ),
         ),
         child: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Dashboard',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.autorenew_rounded),
-            selectedIcon: Icon(Icons.autorenew_rounded),
-            label: 'Recurring',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long_rounded),
-            label: 'Invoices',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline_rounded),
-            selectedIcon: Icon(Icons.people_alt_rounded),
-            label: 'Clients',
-          ),
-        ],
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'Dashboard',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.autorenew_rounded),
+              selectedIcon: Icon(Icons.autorenew_rounded),
+              label: 'Recurring',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long_rounded),
+              label: 'Invoices',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.people_outline_rounded),
+              selectedIcon: Icon(Icons.people_alt_rounded),
+              label: 'Clients',
+            ),
+          ],
         ),
       ),
     );
@@ -388,8 +496,7 @@ class _LedgerDrawer extends StatelessWidget {
                     Navigator.pop(context);
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                          builder: (_) => const ExpensesScreen()),
+                      MaterialPageRoute(builder: (_) => const ExpensesScreen()),
                     );
                   },
                 ),
@@ -415,9 +522,8 @@ class _LedgerDrawer extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primaryContainer,
+                            color:
+                                Theme.of(context).colorScheme.primaryContainer,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -534,14 +640,14 @@ class _LedgerDrawer extends StatelessWidget {
       children: const [
         SizedBox(height: 10),
         Text(
-          'A private, on-device invoicing application for creating one-off '
+          'A private invoicing application for creating one-off '
           'and recurring invoices, managing clients, producing PDFs, and '
           'backing up business records.',
         ),
         SizedBox(height: 12),
         Text(
-          'Invoice and client data is stored locally on this device unless '
-          'you explicitly create or upload a backup.',
+          'Invoice and client data is stored in Cloud Firestore under your '
+          'signed-in account. You can also export backups for safekeeping.',
         ),
       ],
     );

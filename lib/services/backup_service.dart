@@ -67,12 +67,10 @@ class BackupService {
   static const _driveEmailKey = 'backup_drive_email';
   static const _lastBackupKey = 'backup_last_at';
   static const _driveScope = drive.DriveApi.driveAppdataScope;
-  static const _iosClientId =
-      '788321164761-h6e8rp04jli0414uhtuvoqbcoi550lqp.apps.googleusercontent.com';
 
   final DatabaseHelper _db = DatabaseHelper.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: Platform.isIOS ? _iosClientId : null,
+    clientId: Platform.isIOS ? googleIosClientId : null,
     serverClientId: firebaseAndroidServerClientId.isEmpty
         ? null
         : firebaseAndroidServerClientId,
@@ -142,10 +140,10 @@ class BackupService {
         now.toUtc().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
     final temp = await Directory.systemTemp.createTemp('ledger-backup-');
     try {
-      final snapshot = File(p.join(temp.path, 'ledger.db'));
+      final snapshot = File(p.join(temp.path, 'ledger.json'));
       await _db.createSnapshot(snapshot.path);
       final archive = Archive()
-        ..addFile(ArchiveFile('ledger.db', await snapshot.length(),
+        ..addFile(ArchiveFile('ledger.json', await snapshot.length(),
             await snapshot.readAsBytes()));
 
       final settings = await _db.getBusinessSettings();
@@ -159,8 +157,8 @@ class BackupService {
         }
       }
       final manifest = utf8.encode(jsonEncode({
-        'format': 1,
-        'databaseVersion': 6,
+        'format': 2,
+        'databaseVersion': 7,
         'createdAt': now.toUtc().toIso8601String(),
         'app': 'Ledger',
         'logo': logoEntry,
@@ -220,14 +218,16 @@ class BackupService {
 
   Future<void> restoreBackup(File backup) async {
     final decoded = ZipDecoder().decodeBytes(await backup.readAsBytes());
-    final databaseEntry = decoded.findFile('ledger.db');
+    final databaseEntry =
+        decoded.findFile('ledger.json') ?? decoded.findFile('ledger.db');
     final manifestEntry = decoded.findFile('manifest.json');
     if (databaseEntry == null || manifestEntry == null) {
       throw const FormatException('This is not a valid Ledger backup.');
     }
     final manifest = jsonDecode(utf8.decode(manifestEntry.content as List<int>))
         as Map<String, dynamic>;
-    if ((manifest['format'] as num? ?? 0).toInt() != 1) {
+    final format = (manifest['format'] as num? ?? 0).toInt();
+    if (format != 1 && format != 2) {
       throw const FormatException('Unsupported backup format.');
     }
 
@@ -236,7 +236,7 @@ class BackupService {
       final snapshot = File(p.join(temp.path, 'ledger.db'));
       await snapshot.writeAsBytes(databaseEntry.content as List<int>,
           flush: true);
-      await _db.restoreSnapshot(snapshot.path);
+      await _db.restoreSnapshot(snapshot.path, legacy: format == 1);
 
       final logoName = manifest['logo'] as String?;
       final logoEntry = logoName == null ? null : decoded.findFile(logoName);
@@ -302,7 +302,8 @@ class BackupService {
   }
 
   /// Google account used for Drive backups and Firebase Auth.
-  Future<GoogleSignInAccount?> signInForCloud({required bool interactive}) async {
+  Future<GoogleSignInAccount?> signInForCloud(
+      {required bool interactive}) async {
     final current = _googleSignIn.currentUser;
     if (current != null) return current;
     final silent = await _googleSignIn.signInSilently(reAuthenticate: true);

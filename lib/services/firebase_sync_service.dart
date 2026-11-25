@@ -1,38 +1,20 @@
-import 'dart:async';
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../db/database_helper.dart';
 import '../firebase_options.dart';
-import '../models/models.dart';
-import 'backup_service.dart';
+import '../firebase_server_client.dart';
+import 'sqlite_migration_service.dart';
 
-/// Mirrors the on-device SQLite ledger to Firestore for the signed-in user.
-///
-/// SQLite stays the source of truth while the app is open. A local edit is
-/// uploaded shortly after it is saved. On launch, a newer cloud copy replaces
-/// the phone only when this phone has no unsynced edits.
+/// Initializes Firebase and opens the authenticated Firestore ledger. There is
+/// no SQLite mirror or last-writer-wins whole-database synchronization.
 class FirebaseSyncService extends ChangeNotifier {
   FirebaseSyncService._();
   static final instance = FirebaseSyncService._();
-
-  static const _enabledKey = 'firebase_sync_enabled';
-  static const _revisionKey = 'firebase_revision';
-  static const _dirtyKey = 'firebase_dirty';
-  static const _syncedAtKey = 'firebase_last_sync';
-  static const _emailKey = 'firebase_sync_email';
-  static const _schema = 6;
-  static const _logoLimit = 900000;
-
-  final DatabaseHelper _db = DatabaseHelper.instance;
-
   bool ready = false;
   bool enabled = false;
   bool syncing = false;
@@ -40,345 +22,137 @@ class FirebaseSyncService extends ChangeNotifier {
   String? email;
   String? lastError;
 
-  int _epoch = 0;
-  bool _dirty = false;
-  Timer? _pushTimer;
-  Future<void> _queue = Future<void>.value();
-
   Future<void> ensureInitialized() async {
-    final prefs = await SharedPreferences.getInstance();
-    enabled = prefs.getBool(_enabledKey) ?? false;
-    _dirty = prefs.getBool(_dirtyKey) ?? false;
-    lastSync = DateTime.tryParse(prefs.getString(_syncedAtKey) ?? '');
-    email = prefs.getString(_emailKey);
     try {
-      final options = DefaultFirebaseOptions.currentPlatform;
-      await Firebase.initializeApp(options: options);
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform);
+      }
       FirebaseFirestore.instance.settings =
           const Settings(persistenceEnabled: true);
       ready = true;
+      lastError = null;
     } catch (error) {
       ready = false;
-      debugPrint('Firebase is not configured: $error');
-    }
-    notifyListeners();
-  }
-
-  Future<void> setEnabled(bool value) async {
-    enabled = value;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_enabledKey, value);
-    notifyListeners();
-    if (value) await sync(interactive: true);
-  }
-
-  /// Called after every local ledger write.
-  void schedulePush() {
-    _epoch++;
-    _dirty = true;
-    unawaited(_persistDirty(true));
-    if (!ready || !enabled) return;
-    _pushTimer?.cancel();
-    _pushTimer = Timer(const Duration(seconds: 2), () {
-      unawaited(_run(() async {
-        try {
-          await _push(interactive: false);
-        } catch (error) {
-          lastError = _friendly(error);
-          notifyListeners();
-        }
-      }));
-    });
-  }
-
-  /// Uploads or downloads before the UI reads SQLite. Returns true when the
-  /// local database was replaced.
-  Future<bool> syncOnLaunch() async {
-    if (!ready || !enabled) return false;
-    try {
-      return await sync(interactive: false);
-    } catch (error) {
       lastError = _friendly(error);
-      notifyListeners();
-      return false;
     }
+    notifyListeners();
   }
 
-  Future<bool> sync({required bool interactive}) {
-    if (!ready) {
-      if (interactive) {
-        throw StateError(
-          'Firebase is not configured yet. Run flutterfire configure.',
-        );
-      }
-      return Future.value(false);
-    }
-    return _run(() => _sync(interactive: interactive));
-  }
-
-  Future<T> _run<T>(Future<T> Function() action) {
-    final result = _queue.then((_) => action());
-    _queue = result.then((_) {}, onError: (_) {});
-    return result;
-  }
-
-  Future<bool> _sync({required bool interactive}) async {
+  Future<bool> connect({required bool interactive}) async {
     syncing = true;
     lastError = null;
     notifyListeners();
     try {
-      final user = await _signIn(interactive: interactive);
-      if (user == null) return false;
-      email = user.email ?? email;
-      final remote = await _readMeta(user.uid);
-      final prefs = await SharedPreferences.getInstance();
-      final localRevision = prefs.getInt(_revisionKey) ?? 0;
-      final userRows = await _db.userRecordCount();
-
-      if (remote == null) {
-        if (userRows > 0 || _dirty) await _push(interactive: interactive);
-        return false;
-      }
-      if (remote.schema > _schema) {
-        throw StateError(
-          'This ledger was saved by a newer version of the app. Update before syncing.',
+      if (!ready) await ensureInitialized();
+      if (!ready) throw StateError(lastError ?? 'Firebase is not configured.');
+      var user = FirebaseAuth.instance.currentUser;
+      if (user == null && interactive) {
+        if (firebaseAndroidServerClientId.isEmpty) {
+          throw StateError(
+              'Google sign-in is not configured for this app yet.');
+        }
+        final google = GoogleSignIn(
+          clientId: defaultTargetPlatform == TargetPlatform.iOS
+              ? googleIosClientId
+              : null,
+          serverClientId: firebaseAndroidServerClientId.isEmpty
+              ? null
+              : firebaseAndroidServerClientId,
+          scopes: ['email'],
         );
+        final account = await google.signIn();
+        if (account == null) throw StateError('Google sign-in was cancelled.');
+        final tokens = await account.authentication;
+        final result = await FirebaseAuth.instance.signInWithCredential(
+            GoogleAuthProvider.credential(
+                idToken: tokens.idToken, accessToken: tokens.accessToken));
+        user = result.user;
       }
-      if (userRows == 0 && localRevision == 0 && !_dirty) {
-        await _pull(user.uid, remote.revision);
-        return true;
+      if (user == null) return false;
+      email = user.email;
+      final db = DatabaseHelper.instance;
+      await db.connect(FirebaseFirestore.instance, user.uid);
+      // A migrated account may use its cached records offline. First-time
+      // import and seed creation require server confirmation.
+      final marker = db.user.collection('metadata').doc('storage');
+      final state = await marker.get();
+      if (state.data()?['schema'] != 7) {
+        await SqliteMigrationService(db).migrate();
+        await db.seedDefaults();
+        await marker
+            .set({'schema': 7, 'updatedAt': FieldValue.serverTimestamp()});
+      } else {
+        // Each newly installed device may have its own old SQLite ledger.
+        await SqliteMigrationService(db).migrate();
       }
-      if (_dirty || localRevision > remote.revision) {
-        await _push(interactive: interactive);
-        return false;
-      }
-      if (remote.revision > localRevision) {
-        await _pull(user.uid, remote.revision);
-        return true;
-      }
-      return false;
-    } catch (error) {
-      lastError = _friendly(error);
-      if (interactive) {
+      db.watch(onError: (error) {
+        lastError = _friendly(error);
         notifyListeners();
-        throw StateError(lastError!);
-      }
-      return false;
+      });
+      enabled = true;
+      lastSync = DateTime.now();
+      return true;
+    } catch (error) {
+      enabled = false;
+      lastError = _friendly(error);
+      rethrow;
     } finally {
       syncing = false;
       notifyListeners();
     }
   }
 
-  Future<void> _push({required bool interactive}) async {
-    final epoch = _epoch;
-    final user = await _signIn(interactive: interactive);
-    if (user == null) return;
-    final tables = await _db.exportCloudTables();
-    final revision = DateTime.now().millisecondsSinceEpoch;
-    final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
-    final writes = <void Function(WriteBatch batch)>[];
-
-    writes.add((batch) {
-      batch.set(userDoc, {
-        'revision': revision,
-        'schema': _schema,
-        'email': user.email,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
-
-    for (final table in DatabaseHelper.cloudTables) {
-      final collection = userDoc.collection(table);
-      final existing = await collection.get();
-      final localIds = <String>{};
-      for (final row in tables[table] ?? const <Map<String, Object?>>[]) {
-        final id = row['id'];
-        if (id == null) continue;
-        final docId = id.toString();
-        localIds.add(docId);
-        final data = <String, Object?>{};
-        for (final entry in row.entries) {
-          final value = entry.value;
-          if (value == null || value is num || value is String || value is bool) {
-            data[entry.key] = value;
-          }
-        }
-        writes.add((batch) => batch.set(collection.doc(docId), data));
-      }
-      for (final doc in existing.docs) {
-        if (!localIds.contains(doc.id)) {
-          writes.add((batch) => batch.delete(doc.reference));
-        }
-      }
-    }
-
-    await _commit(writes);
-    await _pushLogo(userDoc);
-    if (_epoch != epoch) return;
-
-    _dirty = false;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_dirtyKey, false);
-    await prefs.setInt(_revisionKey, revision);
-    lastSync = DateTime.now();
-    email = user.email ?? email;
-    await prefs.setString(_syncedAtKey, lastSync!.toIso8601String());
-    if (email != null) await prefs.setString(_emailKey, email!);
+  Future<bool> sync({required bool interactive}) async {
+    if (!enabled) return connect(interactive: interactive);
+    syncing = true;
     lastError = null;
     notifyListeners();
-  }
-
-  Future<void> _pull(String uid, int revision) async {
-    final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
-    final tables = <String, List<Map<String, Object?>>>{};
-    for (final table in DatabaseHelper.cloudTables) {
-      final snapshot = await userDoc.collection(table).get();
-      tables[table] = [
-        for (final doc in snapshot.docs)
-          Map<String, Object?>.from(doc.data()),
-      ];
+    try {
+      await FirebaseFirestore.instance
+          .waitForPendingWrites()
+          .timeout(const Duration(seconds: 20));
+      DatabaseHelper.instance.invalidate();
+      lastSync = DateTime.now();
+      return true;
+    } catch (error) {
+      lastError = _friendly(error);
+      rethrow;
+    } finally {
+      syncing = false;
+      notifyListeners();
     }
-    await _db.replaceCloudTables(tables);
-    await _db.runWithoutNotify(() => _pullLogo(userDoc));
-
-    _dirty = false;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_dirtyKey, false);
-    await prefs.setInt(_revisionKey, revision);
-    lastSync = DateTime.now();
-    await prefs.setString(_syncedAtKey, lastSync!.toIso8601String());
-    lastError = null;
-  }
-
-  Future<void> _pushLogo(DocumentReference<Map<String, dynamic>> userDoc) async {
-    final settings = await _db.getBusinessSettings();
-    final logoDoc = userDoc.collection('files').doc('logo');
-    final path = settings.logoPath;
-    if (path == null || path.isEmpty || !File(path).existsSync()) {
-      await logoDoc.delete();
-      return;
-    }
-    final file = File(path);
-    final length = await file.length();
-    if (length > _logoLimit) return;
-    await logoDoc.set({
-      'name': p.basename(path),
-      'bytes': Blob(await file.readAsBytes()),
-    });
-  }
-
-  Future<void> _pullLogo(DocumentReference<Map<String, dynamic>> userDoc) async {
-    final settings = await _db.getBusinessSettings();
-    final snapshot = await userDoc.collection('files').doc('logo').get();
-    if (!snapshot.exists) {
-      final path = settings.logoPath;
-      if (path != null && path.isNotEmpty && !File(path).existsSync()) {
-        await _db.saveBusinessSettings(_settingsWithLogo(settings, null));
-      }
-      return;
-    }
-    final data = snapshot.data();
-    final bytes = data?['bytes'];
-    if (bytes is! Blob) return;
-    final name = data?['name'] as String? ?? 'business_logo.png';
-    final documents = await getApplicationDocumentsDirectory();
-    final file = File(p.join(documents.path, 'firebase_$name'));
-    await file.writeAsBytes(bytes.bytes, flush: true);
-    await _db.saveBusinessSettings(_settingsWithLogo(settings, file.path));
-  }
-
-  BusinessSettings _settingsWithLogo(BusinessSettings settings, String? logoPath) {
-    return BusinessSettings(
-      businessName: settings.businessName,
-      businessSubtitle: settings.businessSubtitle,
-      phone: settings.phone,
-      email: settings.email,
-      address: settings.address,
-      logoPath: logoPath,
-      currencyCode: settings.currencyCode,
-      currencySymbol: settings.currencySymbol,
-      signatureName: settings.signatureName,
-      signatureTitle: settings.signatureTitle,
-      terms: settings.terms,
-    );
-  }
-
-  Future<_RemoteMeta?> _readMeta(String uid) async {
-    final snapshot =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    if (!snapshot.exists) return null;
-    final data = snapshot.data();
-    if (data == null || data['revision'] == null) return null;
-    return _RemoteMeta(
-      revision: (data['revision'] as num).toInt(),
-      schema: (data['schema'] as num?)?.toInt() ?? _schema,
-    );
-  }
-
-  Future<User?> _signIn({required bool interactive}) async {
-    final account =
-        await BackupService.instance.signInForCloud(interactive: interactive);
-    if (account == null) {
-      if (interactive) {
-        throw StateError('Sign in with Google to sync the ledger.');
-      }
-      return null;
-    }
-    final googleAuth = await account.authentication;
-    final hasToken = (googleAuth.idToken != null && googleAuth.idToken!.isNotEmpty) ||
-        (googleAuth.accessToken != null && googleAuth.accessToken!.isNotEmpty);
-    if (!hasToken) {
-      throw StateError(
-        'Google did not return a Firebase token. Set firebaseAndroidServerClientId to the Web client ID, then reinstall the app.',
-      );
-    }
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-    final signedIn =
-        await FirebaseAuth.instance.signInWithCredential(credential);
-    return signedIn.user;
-  }
-
-  Future<void> _commit(List<void Function(WriteBatch batch)> writes) async {
-    const chunk = 400;
-    for (var start = 0; start < writes.length; start += chunk) {
-      final batch = FirebaseFirestore.instance.batch();
-      final end = start + chunk < writes.length ? start + chunk : writes.length;
-      for (var i = start; i < end; i++) {
-        writes[i](batch);
-      }
-      await batch.commit();
-    }
-  }
-
-  Future<void> _persistDirty(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_dirtyKey, value);
   }
 
   String _friendly(Object error) {
-    final text = '$error';
-    if (text.contains('permission-denied')) {
-      return 'Firestore denied this account. Publish firestore.rules from the project, then try again.';
+    if (error is PlatformException && error.code == 'sign_in_failed') {
+      final details = '${error.message} ${error.details}';
+      if (details.contains('12500') ||
+          details.contains('SERVICE_INVALID') ||
+          details.contains('SERVICE_MISSING')) {
+        return 'Google sign-in is unavailable on this device. Use an Android phone or emulator with Google Play Store and working Google Play services.';
+      }
+      if (details.contains('ApiException: 10') ||
+          details.contains('DEVELOPER_ERROR')) {
+        return 'Google sign-in could not verify this app. Check the Google OAuth client and signing certificate configuration.';
+      }
     }
-    if (text.contains('unavailable') || text.contains('network')) {
-      return 'Firebase is offline. This phone keeps the ledger and syncs when it reconnects.';
+    if (error is UnsupportedError) {
+      return 'The cloud connection has not been configured for this app. Contact your app administrator.';
     }
-    if (text.contains('id-token') ||
-        text.contains('invalid-credential') ||
-        text.contains('missing-id-token')) {
-      return 'Google did not return a Firebase token. Set firebaseAndroidServerClientId to the Web client ID, then reinstall the app.';
+    if (error is FirebaseException) {
+      switch (error.code) {
+        case 'permission-denied':
+          return 'This account cannot access the ledger. Check the Firestore security rules.';
+        case 'unavailable':
+          return 'Cannot reach Firebase. Connect to the internet and try again.';
+        case 'operation-not-allowed':
+          return 'Google sign-in is not enabled for this Firebase project.';
+        case 'invalid-credential':
+          return 'Google sign-in could not be verified. Check the Firebase app configuration.';
+      }
+      return error.message ?? error.code;
     }
-    if (error is StateError) return error.message;
-    return text;
+    return error is StateError ? error.message.toString() : '$error';
   }
-}
-
-class _RemoteMeta {
-  const _RemoteMeta({required this.revision, required this.schema});
-  final int revision;
-  final int schema;
 }

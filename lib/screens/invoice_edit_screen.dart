@@ -131,8 +131,7 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
       _resolveTax(rates)?.ratePercent ?? 0;
   double _taxAmountFor(List<TaxRate> rates) =>
       _subtotal * (_taxRateFor(rates) / 100);
-  double _totalFor(List<TaxRate> rates) =>
-      _subtotal + _taxAmountFor(rates);
+  double _totalFor(List<TaxRate> rates) => _subtotal + _taxAmountFor(rates);
 
   String? _requiredNumber(String? value,
       {required double min, required String label}) {
@@ -220,6 +219,11 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
         await state.updateInvoice(record);
       }
       if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not save invoice: $error')));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -256,26 +260,22 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
                       allowClear: true,
                       clearLabel: 'Walk-in / new client',
                       emptyMessage: 'No clients match your search',
-                      items: state.clients
-                          .where((c) => c.id != null)
-                          .map((c) {
-                            final details = [
-                              if (c.email?.trim().isNotEmpty == true) c.email!,
-                              if (c.phone?.trim().isNotEmpty == true) c.phone!,
-                            ].join(' · ');
-                            return SearchableOption<int>(
-                              value: c.id!,
-                              label: c.name,
-                              subtitle: details.isEmpty ? null : details,
-                              searchText:
-                                  '${c.name} ${c.email ?? ''} ${c.phone ?? ''} ${c.address ?? ''}',
-                            );
-                          })
-                          .toList(),
+                      items: state.clients.where((c) => c.id != null).map((c) {
+                        final details = [
+                          if (c.email?.trim().isNotEmpty == true) c.email!,
+                          if (c.phone?.trim().isNotEmpty == true) c.phone!,
+                        ].join(' · ');
+                        return SearchableOption<int>(
+                          value: c.id!,
+                          label: c.name,
+                          subtitle: details.isEmpty ? null : details,
+                          searchText:
+                              '${c.name} ${c.email ?? ''} ${c.phone ?? ''} ${c.address ?? ''}',
+                        );
+                      }).toList(),
                       onChanged: (id) {
-                        final selected = state.clients
-                            .where((c) => c.id == id)
-                            .firstOrNull;
+                        final selected =
+                            state.clients.where((c) => c.id == id).firstOrNull;
                         setState(() {
                           _clientId = id;
                           _saveAsClient = false;
@@ -341,8 +341,9 @@ class _InvoiceEditScreenState extends State<InvoiceEditScreen> {
                             child: InputDecorator(
                               decoration: const InputDecoration(
                                   labelText: 'Issue date'),
-                              child: Text(formatDate(
-                                  _issueDate.toIso8601String().substring(0, 10))),
+                              child: Text(formatDate(_issueDate
+                                  .toIso8601String()
+                                  .substring(0, 10))),
                             ),
                           ),
                         ),

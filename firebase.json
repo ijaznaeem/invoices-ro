@@ -1,5 +1,1 @@
-{
-  "firestore": {
-    "rules": "firestore.rules"
-  }
-}
+{"firestore":{"rules":"firestore.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"invoices-ro","appId":"1:442149700791:android:684f40e505f88dbf3a3932","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"invoices-ro","configurations":{"android":"1:442149700791:android:684f40e505f88dbf3a3932","ios":"1:442149700791:ios:7c143cb9498a3c3c3a3932"}}}}}}

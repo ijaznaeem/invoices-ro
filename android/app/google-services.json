@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "442149700791",
+    "firebase_url": "https://invoices-ro-default-rtdb.firebaseio.com",
+    "project_id": "invoices-ro",
+    "storage_bucket": "invoices-ro.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:442149700791:android:684f40e505f88dbf3a3932",
+        "android_client_info": {
+          "package_name": "com.octavions.invoices_ro"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "442149700791-8ag1ch2focvn4fb7qlprs5pvc4nkslcl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCf9fYmv3jP_hEBEBPr-yRJveu_KeNDanA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "442149700791-8ag1ch2focvn4fb7qlprs5pvc4nkslcl.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "442149700791-1jf1hev1pi1ut7otslcfp4npeoqlk6lo.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.octavions.invoicesRo"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

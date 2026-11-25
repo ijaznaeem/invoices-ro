@@ -40,19 +40,24 @@ dependencies:
   shared_preferences: ^2.5.5
   file_picker: ^13.4.1
   archive: ^4.0.9
+  # image 4.11 calls an archive API unavailable under pdf's archive <4.1 constraint.
+  image: '>=4.10.0 <4.11.0'
   google_sign_in: 6.2.2
   googleapis: 13.2.0
   extension_google_sign_in_as_googleapis_auth: 2.0.12
   firebase_core: ^5.2.0
   firebase_auth: ^7.1.0
   cloud_firestore: ^7.2.0
+  flutter_secure_storage: ^11.2.0
+  http: ^1.6.0
+  http_parser: ^4.1.2
 
 dev_dependencies:
-  http: ^1.2.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  fake_cloud_firestore: ^4.5.0
 
 flutter_launcher_icons:
   android: true
@@ -70,3 +75,4 @@ flutter:
 
   assets:
     - assets/icons/ledger_app_icon.png
+    - assets/fonts/

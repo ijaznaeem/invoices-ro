@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:invoices_ro/main.dart';
 import 'package:invoices_ro/state/app_state.dart';
 import 'package:invoices_ro/state/app_state_scope.dart';
@@ -18,6 +19,9 @@ void main() {
         ),
       ),
     );
+
+    await tester.runAsync(() => GoogleFonts.pendingFonts());
+    await tester.pumpAndSettle();
 
     expect(find.text('Dashboard'), findsNWidgets(2));
     expect(find.text('Recurring'), findsOneWidget);

@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../util/currency_utils.dart';
 import 'accounts_screens.dart';
 import 'payment_options_screen.dart';
+import 'whatsapp_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final BusinessSettings initialSettings;
@@ -251,8 +252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 8),
                     Builder(
                       builder: (ctx) {
-                        final count =
-                            AppStateScope.of(ctx).expenseHeads.length;
+                        final count = AppStateScope.of(ctx).expenseHeads.length;
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.category_outlined),
@@ -305,6 +305,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         );
                       },
                     ),
+
+                    const SizedBox(height: 20),
+                    Card(
+                        child: ListTile(
+                      leading: const Icon(Icons.chat_outlined),
+                      title: const Text('WhatsApp settings'),
+                      subtitle: const Text('WhizText gateway API key'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                              builder: (_) => const WhatsAppSettingsScreen())),
+                    )),
 
                     // ─── Invoice Signature ──────────────────────────────────
                     const SizedBox(height: 28),
